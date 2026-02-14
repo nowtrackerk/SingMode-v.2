@@ -1,0 +1,24 @@
+
+{
+  "manifest_version": 3,
+  "name": "SingMode DJ Console",
+  "version": "1.0.0",
+  "description": "Professional Karaoke Command Center with AI-powered DJ intros and smart song search.",
+  "action": {
+    "default_popup": "index.html",
+    "default_title": "Open SingMode DJ Console",
+    "default_icon": {
+      "16": "https://api.qrserver.com/v1/create-qr-code/?size=16x16&data=SM",
+      "48": "https://api.qrserver.com/v1/create-qr-code/?size=48x48&data=SM",
+      "128": "https://api.qrserver.com/v1/create-qr-code/?size=128x128&data=SM"
+    }
+  },
+  "permissions": [
+    "storage",
+    "tabs",
+    "unlimitedStorage"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ]
+}

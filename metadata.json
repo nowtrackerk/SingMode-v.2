@@ -1,0 +1,8 @@
+{
+  "name": "C2 SingMode",
+  "description": "The ultimate performance interface for karaoke. Sleek, fast, and effortless. Enter SingMode.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}

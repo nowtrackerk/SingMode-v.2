@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SingMode Command - Installation Guide</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=Outfit:wght@400;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #2dd4bf;
+            --bg: #0f172a;
+            --text: #f8fafc;
+            --slate-500: #64748b;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            line-height: 1.6;
+            color: #334155;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px;
+            background: white;
+        }
+        @media print {
+            body { padding: 0; }
+            .no-print { display: none; }
+        }
+        header {
+            text-align: center;
+            border-bottom: 4px solid var(--primary);
+            padding-bottom: 20px;
+            margin-bottom: 40px;
+        }
+        h1 {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: -0.05em;
+            margin: 0;
+            color: #0f172a;
+            font-size: 42px;
+        }
+        .subtitle {
+            font-weight: 700;
+            color: var(--primary);
+            text-transform: uppercase;
+            letter-spacing: 0.2em;
+            font-size: 14px;
+        }
+        h2 {
+            border-left: 4px solid var(--primary);
+            padding-left: 15px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-size: 20px;
+            margin-top: 40px;
+            color: #0f172a;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        th { background: #f1f5f9; font-weight: 700; }
+        .step {
+            margin-bottom: 20px;
+            padding: 20px;
+            background: #f8fafc;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+        }
+        .step-num {
+            font-weight: 900;
+            color: var(--primary);
+            margin-right: 10px;
+        }
+        code {
+            background: #0f172a;
+            color: #f8fafc;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        .footer {
+            margin-top: 60px;
+            text-align: center;
+            font-size: 12px;
+            color: var(--slate-500);
+            border-top: 1px solid #e2e8f0;
+            padding-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>SingMode Command</h1>
+        <div class="subtitle">Windows 11 Deployment Guide | v1.0.2</div>
+    </header>
+
+    <p>This guide provides step-by-step instructions for deploying <strong>SingMode Command</strong> as a professional karaoke workstation on Windows 11.</p>
+
+    <h2>1. System Requirements</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Component</th>
+                <th>Minimum</th>
+                <th>Recommended</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Processor</td>
+                <td>Intel Core i5</td>
+                <td>Intel Core i7 (12th Gen+)</td>
+            </tr>
+            <tr>
+                <td>RAM</td>
+                <td>8GB</td>
+                <td>16GB</td>
+            </tr>
+            <tr>
+                <td>Wi-Fi</td>
+                <td>2.4GHz</td>
+                <td>5GHz (for lowest latency)</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>2. Installation & Setup</h2>
+    
+    <div class="step">
+        <span class="step-num">01</span>
+        <strong>Environment:</strong> Download and install <strong>Node.js (LTS)</strong> from nodejs.org. Ensure it matches your Windows arch (x64).
+    </div>
+
+    <div class="step">
+        <span class="step-num">02</span>
+        <strong>Launch:</strong> Open your SingMode folder, enter the <code>Windows</code> directory, and double-click <code>start_dev_server.bat</code>.
+    </div>
+
+    <div class="step">
+        <span class="step-num">03</span>
+        <strong>Installer:</strong> To create a standalone <code>.exe</code>, run <code>build_installer.bat</code>. This creates a native installer for production use.
+    </div>
+
+    <h2>3. Network Configuration</h2>
+    <p>For smartphone microphones to function, your PC and guest phones must be on the same network profile.</p>
+    <ul>
+        <li>Set your Wi-Fi profile to <strong>"Private"</strong> in Windows Settings.</li>
+        <li>Configure your <strong>Network IP</strong> in the DJ Console UI to match your local IP (e.g., <code>192.168.1.100</code>).</li>
+    </ul>
+
+    <div class="footer">
+        © 2026 SingMode Team. Documentation Generated for Professional Deployment.
+    </div>
+</body>
+</html>
