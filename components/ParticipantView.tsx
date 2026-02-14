@@ -119,10 +119,10 @@ const ParticipantView: React.FC = () => {
     if (!participant) return;
     const newStatus = participant.status === ParticipantStatus.READY ? ParticipantStatus.STANDBY : ParticipantStatus.READY;
     await updateParticipantStatus(participant.id, newStatus);
-    if (newStatus === ParticipantStatus.STANDBY && micStream) {
-      stopMic();
-      await updateParticipantMic(participant.id, false);
-    }
+    // if (newStatus === ParticipantStatus.STANDBY && micStream) {
+    //   stopMic();
+    //   await updateParticipantMic(participant.id, false);
+    // }
     await refresh();
   };
 
