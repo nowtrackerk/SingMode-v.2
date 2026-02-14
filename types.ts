@@ -37,6 +37,7 @@ export interface UserProfile {
   password?: string;
   favorites: FavoriteSong[];
   personalHistory: SongRequest[];
+  createdAt: number;
 }
 
 export interface Participant {

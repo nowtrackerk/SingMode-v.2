@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ViewRole } from './types';
 import DJView from './components/DJView';
 import ParticipantView from './components/ParticipantView';
-import { getSession, initializeSync } from './services/sessionManager';
+import { getSession, initializeSync, cleanupExpiredGuestAccounts } from './services/sessionManager';
 import { syncService } from './services/syncService';
 import { SingModeLogo } from './components/common/SingModeLogo';
 import { SyncBadge } from './components/common/SyncBadge';
@@ -45,6 +45,7 @@ const App: React.FC = () => {
 
       // Pre-load session to avoid flickering
       await getSession();
+      await cleanupExpiredGuestAccounts();
       setLoading(false);
     };
     init();

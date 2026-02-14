@@ -286,9 +286,23 @@ const DJView: React.FC<DJViewProps> = () => {
       });
       setIsAddingVerifiedSong(false);
     } else {
+      let participantId = prefilledSinger?.id || 'DJ-MANUAL';
+      let participantName = data.singerName || prefilledSinger?.name || 'Guest';
+
+      if (!prefilledSinger && data.singerName) {
+        // Register a guest user for the manually entered name
+        const result = await registerUser({ name: data.singerName });
+        if (result.success && result.profile) {
+          participantId = result.profile.id;
+          participantName = result.profile.name;
+          // Also join the session so they appear in the participants list
+          await joinSession(participantId);
+        }
+      }
+
       await addRequest({
-        participantId: prefilledSinger?.id || 'DJ-MANUAL',
-        participantName: data.singerName || prefilledSinger?.name || 'Guest',
+        participantId,
+        participantName,
         songName: data.songName,
         artist: data.artist,
         youtubeUrl: data.youtubeUrl,

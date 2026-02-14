@@ -185,7 +185,8 @@ export const getAllAccounts = async (): Promise<UserProfile[]> => {
       id: `singer-${i + 1}`,
       name: `Singer${i + 1}`,
       favorites: [],
-      personalHistory: []
+      personalHistory: [],
+      createdAt: Date.now()
     }));
     await storage.set(ACCOUNTS_KEY, seededAccounts);
     return seededAccounts;
@@ -317,7 +318,8 @@ export const registerUser = async (data: Partial<UserProfile>, autoLogin = false
     name: data.name || '',
     password: data.password || undefined,
     favorites: data.favorites || [],
-    personalHistory: data.personalHistory || []
+    personalHistory: data.personalHistory || [],
+    createdAt: Date.now()
   };
   accounts.push(profile);
   await storage.set(ACCOUNTS_KEY, accounts);
@@ -735,4 +737,19 @@ export const deleteTickerMessage = async (id: string) => {
   const session = await getSession();
   session.tickerMessages = session.tickerMessages.filter(m => m.id !== id);
   await saveSession(session);
+};
+
+export const cleanupExpiredGuestAccounts = async () => {
+  const accounts = await getAllAccounts();
+  const now = Date.now();
+  const cutoff = 24 * 60 * 60 * 1000; // 24 hours
+
+  const toDelete = accounts.filter(a => !a.password && a.createdAt && (now - a.createdAt > cutoff));
+
+  if (toDelete.length > 0) {
+    for (const user of toDelete) {
+      await deleteAccount(user.id);
+    }
+    console.log(`Cleaned up ${toDelete.length} expired guest accounts.`);
+  }
 };
