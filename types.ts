@@ -35,6 +35,9 @@ export interface UserProfile {
   id: string;
   name: string;
   password?: string;
+  email?: string;
+  picture?: string;
+  googleId?: string;
   favorites: FavoriteSong[];
   personalHistory: SongRequest[];
   createdAt: number;
@@ -51,6 +54,7 @@ export interface Participant {
 
 export interface SongRequest {
   id: string;
+  requestNumber?: number; // Unique numeric ID for display
   participantId: string;
   participantName: string;
   songName: string;
@@ -93,6 +97,7 @@ export interface KaraokeSession {
   tickerMessages: TickerMessage[];
   verifiedSongbook: VerifiedSong[];
   isPlayingVideo?: boolean;
+  nextRequestNumber: number;
 }
 
 export type ViewRole = 'DJ' | 'PARTICIPANT' | 'STAGE' | 'SELECT' | 'FEATURES';
@@ -105,7 +110,12 @@ export type RemoteActionType =
   | 'TOGGLE_MIC'
   | 'DELETE_REQUEST'
   | 'UPDATE_REQUEST'
-  | 'ADD_CHAT';
+  | 'ADD_CHAT'
+  | 'SYNC_PROFILE'
+  | 'REORDER_ROUND'
+  | 'REORDER_REQUESTS'
+  | 'TOGGLE_FAVORITE'
+  | 'REORDER_PENDING';
 
 export interface RemoteAction {
   type: RemoteActionType;

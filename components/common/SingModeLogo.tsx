@@ -2,19 +2,19 @@ import React from 'react';
 
 export const SingModeLogo: React.FC<{ size?: 'sm' | 'md' | 'lg', className?: string }> = ({ size = 'md', className = '' }) => {
     const sizes = {
-        sm: 'w-8 h-8 text-sm',
-        md: 'w-12 h-12 text-xl',
-        lg: 'w-24 h-24 text-4xl'
+        sm: 'w-10 h-10 text-[10px]',
+        md: 'w-14 h-14 text-sm',
+        lg: 'w-28 h-28 text-2xl'
     };
 
     return (
-        <div className={`flex items-center gap-3 ${className}`}>
-            <div className={`${sizes[size]} bg-teal-400 rounded-xl flex items-center justify-center font-black text-slate-950 shadow-lg shadow-teal-400/20 transition-transform hover:scale-105`}>
+        <div className={`flex items-center gap-4 ${className} group cursor-pointer`}>
+            <div className={`${sizes[size]} bg-black border-2 border-cyan-400 rounded-2xl flex items-center justify-center font-black text-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.2)] transition-all group-hover:neon-border-pink group-hover:text-pink-500 group-hover:scale-110 font-bungee`}>
                 SM
             </div>
-            <div className="font-outfit font-black tracking-tighter flex flex-col leading-none">
-                <span className="text-teal-400 text-[0.6em] uppercase tracking-[0.4em] mb-1">Enter</span>
-                <span className="text-white uppercase">SingMode</span>
+            <div className="font-bungee tracking-tighter flex flex-col leading-none">
+                <span className="text-pink-500 text-[0.5em] tracking-[0.5em] mb-1 font-righteous uppercase">Terminal</span>
+                <span className="text-white uppercase group-hover:neon-glow-pink transition-all">SingMode</span>
             </div>
         </div>
     );

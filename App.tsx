@@ -13,10 +13,8 @@ import { getNetworkUrl, getStoredNetworkIp, setNetworkIp } from './services/netw
 const App: React.FC = () => {
   const [role, setRole] = useState<ViewRole>('SELECT');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [isQRCodeUser, setIsQRCodeUser] = useState(false);
-
-
-
 
   const [showNetworkConfig, setShowNetworkConfig] = useState(false);
   const [networkIpInput, setNetworkIpInput] = useState('');
@@ -33,14 +31,20 @@ const App: React.FC = () => {
         setIsQRCodeUser(true);
       }
 
-      if (view === 'DJ') {
-        setRole('DJ');
-        await initializeSync('DJ', room || undefined);
-      } else if (view === 'PARTICIPANT' || room) {
-        setRole('PARTICIPANT');
-        await initializeSync('PARTICIPANT', room || undefined);
-      } else {
-        setRole('SELECT');
+      try {
+        if (view === 'DJ') {
+          setRole('DJ');
+          await initializeSync('DJ', room || undefined);
+        } else if (view === 'PARTICIPANT' || room) {
+          setRole('PARTICIPANT');
+          await initializeSync('PARTICIPANT', room || undefined);
+        } else {
+          setRole('SELECT');
+        }
+      } catch (err: any) {
+        console.error('[App] Init Error:', err);
+        setError(err.message);
+        setRole('SELECT'); // Revert to select role on error
       }
 
       // Pre-load session to avoid flickering
@@ -50,6 +54,22 @@ const App: React.FC = () => {
     };
     init();
   }, []);
+
+  const handleManualRoleSelect = async (newRole: ViewRole) => {
+    setLoading(true);
+    setError(null);
+    try {
+      setRole(newRole);
+      if (newRole === 'DJ' || newRole === 'PARTICIPANT') {
+        await initializeSync(newRole);
+      }
+    } catch (err: any) {
+      setError(err.message);
+      setRole('SELECT');
+    } finally {
+      setLoading(false);
+    }
+  };
 
 
 
@@ -67,7 +87,7 @@ const App: React.FC = () => {
 
   if (loading) return (
     <div className="min-h-screen bg-black flex items-center justify-center">
-      <div className="w-16 h-16 border-4 border-[#FF1493] border-t-transparent rounded-full animate-spin neon-border-pink"></div>
+      <div className="w-16 h-16 border-4 border-t-transparent rounded-full animate-spin neon-border-pink" style={{ borderColor: 'var(--neon-pink)', borderTopColor: 'transparent' }}></div>
     </div>
   );
 
@@ -92,30 +112,39 @@ const App: React.FC = () => {
             <p className="text-[#FFD700] text-xl font-bold tracking-wide uppercase neon-glow-yellow">KARAOKE LOUNGE</p>
           </div>
 
+          {error && (
+            <div className="mb-8 p-6 bg-rose-500/10 border-2 border-rose-500 rounded-[2rem] text-center animate-in zoom-in duration-300">
+              <div className="text-3xl mb-2">🚫</div>
+              <h3 className="text-rose-500 font-black uppercase tracking-widest text-lg mb-2">Session Conflict</h3>
+              <p className="text-white font-medium">{error}</p>
+              <p className="text-slate-400 text-xs mt-4 uppercase font-bold">Only one DJ is allowed per local network.</p>
+            </div>
+          )}
+
           <div className={`grid gap-8 ${isQRCodeUser ? 'grid-cols-1 max-w-md mx-auto' : 'md:grid-cols-2'}`}>
             {!isQRCodeUser && (
               <button
-                onClick={async () => { setRole('DJ'); await initializeSync('DJ'); }}
-                className="group p-10 bg-black/80 border-2 border-[#FF1493] rounded-[2.5rem] text-left hover:border-[#00FFFF] hover:bg-black transition-all shadow-2xl neon-border-pink hover:neon-border-cyan"
+                onClick={() => handleManualRoleSelect('DJ')}
+                className="group p-10 bg-black/80 border-2 rounded-[2.5rem] text-left hover:bg-black transition-all shadow-2xl neon-border-pink hover:neon-border-cyan"
               >
-                <div className="w-16 h-16 bg-black border-2 border-[#FFD700] rounded-2xl flex items-center justify-center text-3xl mb-6 group-hover:scale-110 group-hover:border-[#00FF00] transition-all neon-border-yellow">🎧</div>
-                <h2 className="text-3xl font-black text-[#FF1493] mb-2 font-righteous uppercase tracking-tight neon-glow-pink">DJ CONSOLE</h2>
-                <p className="text-[#00FFFF] font-medium">Coordinate the room. Approve tracks and manage the rotation.</p>
+                <div className="w-16 h-16 bg-black border-2 rounded-2xl flex items-center justify-center text-3xl mb-6 group-hover:scale-110 transition-all neon-border-yellow group-hover:neon-border-green">🎧</div>
+                <h2 className="text-3xl font-black mb-2 font-righteous uppercase tracking-tight neon-glow-pink" style={{ color: 'var(--neon-pink)' }}>DJ CONSOLE</h2>
+                <p className="font-medium" style={{ color: 'var(--neon-cyan)' }}>Coordinate the room. Approve tracks and manage the rotation.</p>
               </button>
             )}
 
             <button
-              onClick={async () => { setRole('PARTICIPANT'); await initializeSync('PARTICIPANT'); }}
-              className="group p-10 bg-black/80 border-2 border-[#00FFFF] rounded-[2.5rem] text-left hover:border-[#FFD700] hover:bg-black transition-all shadow-2xl neon-border-cyan hover:neon-border-yellow"
+              onClick={() => handleManualRoleSelect('PARTICIPANT')}
+              className="group p-10 bg-black/80 border-2 rounded-[2.5rem] text-left hover:bg-black transition-all shadow-2xl neon-border-cyan hover:neon-border-yellow"
             >
-              <div className="w-16 h-16 bg-black border-2 border-[#9D00FF] rounded-2xl flex items-center justify-center text-3xl mb-6 group-hover:scale-110 group-hover:border-[#00FF00] transition-all">🎤</div>
-              <h2 className="text-3xl font-black text-[#00FFFF] mb-2 font-righteous uppercase tracking-tight neon-glow-cyan">SINGER UI</h2>
-              <p className="text-[#FFD700] font-medium">Request songs, star your favorites, and prepare to perform.</p>
+              <div className="w-16 h-16 bg-black border-2 rounded-2xl flex items-center justify-center text-3xl mb-6 group-hover:scale-110 transition-all neon-border-purple group-hover:neon-border-green">🎤</div>
+              <h2 className="text-3xl font-black mb-2 font-righteous uppercase tracking-tight neon-glow-cyan" style={{ color: 'var(--neon-cyan)' }}>SINGER UI</h2>
+              <p className="font-medium" style={{ color: 'var(--neon-yellow)' }}>Request songs, star your favorites, and prepare to perform.</p>
             </button>
           </div>
 
-          <div className="mt-16 p-8 bg-black/60 border-2 border-[#FF1493] rounded-[2.5rem] flex flex-col md:flex-row items-center gap-8 backdrop-blur-sm neon-border-pink">
-            <div className="bg-white p-3 rounded-2xl shrink-0 shadow-2xl border-4 border-[#FFD700]">
+          <div className="mt-16 p-8 bg-black/60 border-2 rounded-[2.5rem] flex flex-col md:flex-row items-center gap-8 backdrop-blur-sm neon-border-pink">
+            <div className="bg-white p-3 rounded-2xl shrink-0 shadow-2xl border-4 neon-border-yellow" style={{ borderColor: 'var(--neon-yellow)' }}>
               <img
                 src={qrCodeUrl}
                 alt="Join QR Code"
@@ -200,8 +229,9 @@ const App: React.FC = () => {
           <div className="flex items-center gap-6">
 
             <button
-              onClick={() => setRole('SELECT')}
-              className="text-[10px] font-black text-[#00FFFF] hover:text-[#FFD700] uppercase tracking-widest px-4 py-2 border-2 border-[#00FFFF] rounded-xl transition-all neon-border-cyan"
+              onClick={() => { setRole('SELECT'); setError(null); }}
+              className="text-[10px] font-black uppercase tracking-widest px-4 py-2 border-2 rounded-xl transition-all neon-border-cyan neon-glow-cyan"
+              style={{ color: 'var(--neon-cyan)', borderColor: 'var(--neon-cyan)' }}
             >
               EXIT {role}
             </button>

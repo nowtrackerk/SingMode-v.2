@@ -16,7 +16,8 @@ const INITIAL_SESSION: KaraokeSession = {
   messages: [],
   tickerMessages: [],
   verifiedSongbook: [],
-  isPlayingVideo: false
+  isPlayingVideo: false,
+  nextRequestNumber: 1
 };
 
 const isExtension = typeof window !== 'undefined' && (window as any).chrome && (window as any).chrome.storage;
@@ -55,6 +56,13 @@ syncService.onActionReceived = (action) => {
   handleRemoteAction(action);
 };
 
+syncService.onPeerConnected = async () => {
+  if (!isRemoteClient) {
+    const session = await getSession();
+    syncService.broadcastState(session);
+  }
+};
+
 async function handleRemoteAction(action: RemoteAction) {
   switch (action.type) {
     case 'ADD_REQUEST':
@@ -91,6 +99,38 @@ async function handleRemoteAction(action: RemoteAction) {
     case 'ADD_CHAT':
       await addChatMessage(action.senderId, action.payload.name, action.payload.text);
       break;
+    case 'SYNC_PROFILE':
+      if (isRemoteClient) {
+        const profile = await getUserProfile();
+        if (profile && profile.id === action.payload.id) {
+          await storage.set(PROFILE_KEY, action.payload);
+        }
+      }
+      // Both DJ and Participant should update their accounts list
+      const accounts = await getAllAccounts();
+      const idx = accounts.findIndex(a => a.id === action.payload.id);
+      if (idx > -1) {
+        accounts[idx] = action.payload;
+      } else {
+        accounts.push(action.payload);
+      }
+      await storage.set(ACCOUNTS_KEY, accounts);
+      break;
+    case 'TOGGLE_FAVORITE':
+      // DJ handles a request from participant to toggle a favorite
+      if (!isRemoteClient) {
+        await toggleFavorite(action.payload, action.senderId);
+      }
+      break;
+    case 'REORDER_ROUND':
+      await reorderCurrentRound(action.payload);
+      break;
+    case 'REORDER_REQUESTS':
+      await reorderRequests(action.payload);
+      break;
+    case 'REORDER_PENDING':
+      await reorderPendingRequests(action.payload);
+      break;
   }
 }
 
@@ -106,6 +146,7 @@ export const getSession = async (): Promise<KaraokeSession> => {
   if (!session.tickerMessages) session.tickerMessages = [];
   if (!session.verifiedSongbook) session.verifiedSongbook = [];
   if (session.isPlayingVideo === undefined) session.isPlayingVideo = false;
+  if (!session.nextRequestNumber) session.nextRequestNumber = 1;
   return session;
 };
 
@@ -164,10 +205,11 @@ export const deleteVerifiedSong = async (songId: string) => {
 
 export const resetSession = async () => {
   const current = await getSession();
-  const emptySession = {
+  const emptySession: KaraokeSession = {
     ...INITIAL_SESSION,
     id: `session-${Date.now()}`,
-    verifiedSongbook: current.verifiedSongbook // Persist the songbook
+    verifiedSongbook: current.verifiedSongbook, // Persist the songbook
+    nextRequestNumber: 1
   };
   await saveSession(emptySession);
 };
@@ -194,17 +236,25 @@ export const getAllAccounts = async (): Promise<UserProfile[]> => {
   return accounts;
 };
 
-export const updateAccount = async (profileId: string, updates: Partial<UserProfile>) => {
+export const updateAccount = async (profileId: string, updates: Partial<UserProfile>): Promise<{ success: boolean, error?: string }> => {
   const accounts = await getAllAccounts();
   const idx = accounts.findIndex(a => a.id === profileId);
   if (idx > -1) {
+    if (updates.name && accounts.some(a => a.id !== profileId && a.name.toLowerCase() === updates.name?.toLowerCase())) {
+      return { success: false, error: "Username already exists." };
+    }
     accounts[idx] = { ...accounts[idx], ...updates };
     await storage.set(ACCOUNTS_KEY, accounts);
     const active = await getUserProfile();
     if (active && active.id === profileId) {
       await storage.set(PROFILE_KEY, accounts[idx]);
     }
+    if (!isRemoteClient) {
+      syncService.broadcastAction({ type: 'SYNC_PROFILE', payload: accounts[idx], senderId: 'DJ' });
+    }
+    return { success: true };
   }
+  return { success: false, error: "Account not found." };
 };
 
 export const removeUserFavorite = async (profileId: string, favoriteId: string) => {
@@ -216,6 +266,9 @@ export const removeUserFavorite = async (profileId: string, favoriteId: string) 
     const active = await getUserProfile();
     if (active && active.id === profileId) {
       await storage.set(PROFILE_KEY, accounts[idx]);
+    }
+    if (!isRemoteClient) {
+      syncService.broadcastAction({ type: 'SYNC_PROFILE', payload: accounts[idx], senderId: 'DJ' });
     }
   }
 };
@@ -232,6 +285,9 @@ export const updateUserFavorite = async (profileId: string, favoriteId: string, 
       if (active && active.id === profileId) {
         await storage.set(PROFILE_KEY, accounts[idx]);
       }
+      if (!isRemoteClient) {
+        syncService.broadcastAction({ type: 'SYNC_PROFILE', payload: accounts[idx], senderId: 'DJ' });
+      }
     }
   }
 };
@@ -247,6 +303,9 @@ export const addUserFavorite = async (profileId: string, song: Omit<FavoriteSong
     if (active && active.id === profileId) {
       await storage.set(PROFILE_KEY, accounts[idx]);
     }
+    if (!isRemoteClient) {
+      syncService.broadcastAction({ type: 'SYNC_PROFILE', payload: accounts[idx], senderId: 'DJ' });
+    }
   }
 };
 
@@ -259,6 +318,9 @@ export const removeUserHistoryItem = async (profileId: string, historyId: string
     const active = await getUserProfile();
     if (active && active.id === profileId) {
       await storage.set(PROFILE_KEY, accounts[idx]);
+    }
+    if (!isRemoteClient) {
+      syncService.broadcastAction({ type: 'SYNC_PROFILE', payload: accounts[idx], senderId: 'DJ' });
     }
   }
 };
@@ -274,6 +336,9 @@ export const updateUserHistoryItem = async (profileId: string, historyId: string
       const active = await getUserProfile();
       if (active && active.id === profileId) {
         await storage.set(PROFILE_KEY, accounts[idx]);
+      }
+      if (!isRemoteClient) {
+        syncService.broadcastAction({ type: 'SYNC_PROFILE', payload: accounts[idx], senderId: 'DJ' });
       }
     }
   }
@@ -310,9 +375,20 @@ export const saveUserProfile = async (profile: UserProfile) => {
 export const registerUser = async (data: Partial<UserProfile>, autoLogin = false): Promise<{ success: boolean, error?: string, profile?: UserProfile }> => {
   const accounts = await getAllAccounts();
   const existing = accounts.find(a => a.name.toLowerCase() === data.name?.toLowerCase());
-  if (existing && existing.password) {
-    return { success: false, error: "Username is registered. Please login with password." };
+
+  if (existing) {
+    if (existing.password) {
+      return { success: false, error: "Username is registered. Please login with password." };
+    }
+    // If it's a guest account and we're NOT in autoLogin mode (e.g. DJ creating a guest), prevent duplicate names
+    if (!autoLogin) {
+      return { success: false, error: "Username already exists." };
+    }
+    // For autoLogin (Participant view joining as guest), we might want to allow joining existing guest profiles,
+    // which is the current behavior (returning the found profile below if it has no password).
+    return { success: true, profile: existing };
   }
+
   const profile: UserProfile = {
     id: data.id || Math.random().toString(36).substr(2, 9),
     name: data.name || '',
@@ -325,6 +401,9 @@ export const registerUser = async (data: Partial<UserProfile>, autoLogin = false
   await storage.set(ACCOUNTS_KEY, accounts);
   if (autoLogin) {
     await storage.set(PROFILE_KEY, profile);
+  } else if (!isRemoteClient) {
+    // If DJ is registering someone, broadcast it (optional but good for consistency)
+    syncService.broadcastAction({ type: 'SYNC_PROFILE', payload: profile, senderId: 'DJ' });
   }
   return { success: true, profile };
 };
@@ -404,18 +483,45 @@ const addParticipantToSession = async (session: KaraokeSession, profile: UserPro
   return newParticipant;
 };
 
-export const toggleFavorite = async (song: Omit<FavoriteSong, 'id'>) => {
-  const profile = await getUserProfile();
-  if (!profile) return;
-  const existingIndex = profile.favorites.findIndex(f =>
-    f.songName === song.songName && f.artist === song.artist
-  );
-  if (existingIndex > -1) {
-    profile.favorites.splice(existingIndex, 1);
-  } else {
-    profile.favorites.push({ ...song, id: Math.random().toString(36).substr(2, 9) });
+export const toggleFavorite = async (song: Omit<FavoriteSong, 'id'>, specificProfileId?: string) => {
+  const profileId = specificProfileId || (await getUserProfile())?.id;
+  if (!profileId) return;
+
+  if (isRemoteClient && !specificProfileId) {
+    syncService.sendAction({ type: 'TOGGLE_FAVORITE', payload: song, senderId: profileId });
+    // Optimistic update locally
+    const profile = await getUserProfile();
+    if (profile) {
+      const existingIndex = profile.favorites.findIndex(f => f.songName === song.songName && f.artist === song.artist);
+      if (existingIndex > -1) profile.favorites.splice(existingIndex, 1);
+      else profile.favorites.push({ ...song, id: Math.random().toString(36).substr(2, 9) });
+      await storage.set(PROFILE_KEY, profile);
+    }
+    return;
   }
-  await saveUserProfile(profile);
+
+  const accounts = await getAllAccounts();
+  const accIdx = accounts.findIndex(a => a.id === profileId);
+  if (accIdx > -1) {
+    const existingIndex = accounts[accIdx].favorites.findIndex(f =>
+      f.songName === song.songName && f.artist === song.artist
+    );
+    if (existingIndex > -1) {
+      accounts[accIdx].favorites.splice(existingIndex, 1);
+    } else {
+      accounts[accIdx].favorites.push({ ...song, id: Math.random().toString(36).substr(2, 9) });
+    }
+    await storage.set(ACCOUNTS_KEY, accounts);
+
+    if (!isRemoteClient) {
+      syncService.broadcastAction({ type: 'SYNC_PROFILE', payload: accounts[accIdx], senderId: 'DJ' });
+    }
+
+    const active = await getUserProfile();
+    if (active && active.id === profileId) {
+      await storage.set(PROFILE_KEY, accounts[accIdx]);
+    }
+  }
 };
 
 export const addParticipantByDJ = async (name: string, status: ParticipantStatus = ParticipantStatus.STANDBY): Promise<Participant> => {
@@ -434,6 +540,20 @@ export const addParticipantByDJ = async (name: string, status: ParticipantStatus
 
 export const removeParticipant = async (participantId: string) => {
   const session = await getSession();
+
+  // Concept: move information not existing into session to History if participant is no longer connected
+  const retiringRequests = session.requests.filter(r => r.participantId === participantId);
+  const historyCopies = retiringRequests.map(r => ({
+    ...r,
+    playedAt: Date.now(),
+    status: RequestStatus.DONE, // Marking as done for history record
+    isInRound: false
+  }));
+
+  if (historyCopies.length > 0) {
+    session.history = [...historyCopies, ...session.history].slice(0, 100);
+  }
+
   session.participants = session.participants.filter(p => p.id !== participantId);
   session.requests = session.requests.filter(r => r.participantId !== participantId);
   if (session.currentRound) {
@@ -475,20 +595,36 @@ export const addRequest = async (request: Omit<SongRequest, 'id' | 'createdAt' |
     return null;
   }
   const session = await getSession();
+  const requestNumber = session.nextRequestNumber++;
   const newRequest: SongRequest = {
     ...request,
     id: Math.random().toString(36).substr(2, 9),
+    requestNumber,
     createdAt: Date.now(),
     status: RequestStatus.PENDING,
     isInRound: false
   };
   session.requests.push(newRequest);
   updateVerifiedSongbook(session, newRequest);
-  const profile = await getUserProfile();
-  if (profile && profile.id === request.participantId) {
-    profile.personalHistory = [newRequest, ...profile.personalHistory].slice(0, 50);
-    await saveUserProfile(profile);
+
+  // Update the account's personal history on the DJ/Host side
+  const accounts = await getAllAccounts();
+  const accIdx = accounts.findIndex(a => a.id === request.participantId);
+  if (accIdx > -1) {
+    accounts[accIdx].personalHistory = [newRequest, ...accounts[accIdx].personalHistory].slice(0, 50);
+    await storage.set(ACCOUNTS_KEY, accounts);
+    if (!isRemoteClient) {
+      syncService.broadcastAction({ type: 'SYNC_PROFILE', payload: accounts[accIdx], senderId: 'DJ' });
+    }
   }
+
+  // Also update local active profile if it's us
+  const activeStub = await getUserProfile();
+  if (activeStub && activeStub.id === request.participantId) {
+    const updated = accounts.find(a => a.id === request.participantId);
+    if (updated) await storage.set(PROFILE_KEY, updated);
+  }
+
   await saveSession(session);
   return newRequest;
 };
@@ -513,12 +649,24 @@ export const updateRequest = async (requestId: string, updates: Partial<SongRequ
       participantId = session.currentRound[roundIndex].participantId;
     }
   }
-  const profile = await getUserProfile();
-  if (profile && profile.id === participantId) {
-    const hIdx = profile.personalHistory.findIndex(h => h.id === requestId);
-    if (hIdx !== -1) {
-      profile.personalHistory[hIdx] = { ...profile.personalHistory[hIdx], ...updates };
-      await saveUserProfile(profile);
+
+  if (participantId) {
+    const accounts = await getAllAccounts();
+    const accIdx = accounts.findIndex(a => a.id === participantId);
+    if (accIdx > -1) {
+      const hIdx = accounts[accIdx].personalHistory.findIndex(h => h.id === requestId);
+      if (hIdx !== -1) {
+        accounts[accIdx].personalHistory[hIdx] = { ...accounts[accIdx].personalHistory[hIdx], ...updates };
+        await storage.set(ACCOUNTS_KEY, accounts);
+        if (!isRemoteClient) {
+          syncService.broadcastAction({ type: 'SYNC_PROFILE', payload: accounts[accIdx], senderId: 'DJ' });
+        }
+      }
+    }
+    const activeStub = await getUserProfile();
+    if (activeStub && activeStub.id === participantId) {
+      const updated = accounts.find(a => a.id === participantId);
+      if (updated) await storage.set(PROFILE_KEY, updated);
     }
   }
   await saveSession(session);
@@ -577,11 +725,20 @@ export const reorderRequest = async (requestId: string, direction: 'up' | 'down'
 
 export const generateRound = async () => {
   const session = await getSession();
-  const readyParticipants = session.participants
-    .filter(p => p.status === ParticipantStatus.READY)
-    .sort((a, b) => b.joinedAt - a.joinedAt);
+
+  // Find all participants who have at least one approved singing request that isn't already in a round
+  const eligibleParticipants = session.participants.filter(p =>
+    session.requests.some(r =>
+      r.participantId === p.id &&
+      r.status === RequestStatus.APPROVED &&
+      r.type === RequestType.SINGING &&
+      !r.isInRound
+    )
+  ).sort((a, b) => (b.joinedAt || 0) - (a.joinedAt || 0));
+
   const roundSongs: SongRequest[] = [];
-  readyParticipants.forEach(p => {
+
+  eligibleParticipants.forEach(p => {
     const songRef = session.requests.find(r =>
       r.participantId === p.id &&
       r.status === RequestStatus.APPROVED &&
@@ -591,12 +748,47 @@ export const generateRound = async () => {
     if (songRef) {
       songRef.isInRound = true;
       roundSongs.push({ ...songRef });
+      // Automatically set participant to READY if they are in the round
+      p.status = ParticipantStatus.READY;
     }
   });
+
   if (roundSongs.length > 0) {
     session.currentRound = roundSongs;
     await saveSession(session);
   }
+};
+
+export const reorderCurrentRound = async (newRound: SongRequest[]) => {
+  const session = await getSession();
+  session.currentRound = newRound;
+  await saveSession(session);
+};
+
+export const reorderRequests = async (newRequests: SongRequest[]) => {
+  const session = await getSession();
+  // We need to preserve non-singing/listening requests if they aren't in the newRequests list,
+  // or just replace the approved singing ones in their specific order while keeping others?
+  // Usually, newRequests will be the full list of filtered 'approvedSinging' from the UI.
+
+  // Strategy: Map the new order back to the session.requests
+  const otherRequests = session.requests.filter(r =>
+    !(r.status === RequestStatus.APPROVED && r.type === RequestType.SINGING && !r.isInRound)
+  );
+
+  session.requests = [...newRequests, ...otherRequests];
+  await saveSession(session);
+};
+
+export const reorderPendingRequests = async (newRequests: SongRequest[]) => {
+  const session = await getSession();
+  // Strategy: Map the new order back to the session.requests
+  const otherRequests = session.requests.filter(r =>
+    !(r.status === RequestStatus.PENDING && !r.isInRound)
+  );
+
+  session.requests = [...newRequests, ...otherRequests];
+  await saveSession(session);
 };
 
 export const rotateStageSong = async (requestId: string) => {
@@ -676,9 +868,11 @@ export const finishRound = async () => {
 
 export const reAddFromHistory = async (historyItem: SongRequest, asApproved: boolean) => {
   const session = await getSession();
+  const requestNumber = session.nextRequestNumber++;
   const newRequest: SongRequest = {
     ...historyItem,
     id: Math.random().toString(36).substr(2, 9),
+    requestNumber,
     createdAt: Date.now(),
     status: asApproved ? RequestStatus.APPROVED : RequestStatus.PENDING,
     isInRound: false,

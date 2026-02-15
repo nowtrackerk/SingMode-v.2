@@ -3,6 +3,7 @@ import { KaraokeSession, RemoteAction } from '../types';
 
 class SyncService {
   private peer: Peer | null = null;
+  private lockPeer: Peer | null = null; // Separate peer to "hold" the network lock
   private connections: Map<string, DataConnection> = new Map();
   private hostId: string | null = null;
   private isHost: boolean = false;
@@ -13,6 +14,18 @@ class SyncService {
   public onStateReceived: ((state: KaraokeSession) => void) | null = null;
   public onActionReceived: ((action: RemoteAction) => void) | null = null;
   public onConnectionStatus: ((status: 'connected' | 'disconnected' | 'connecting') => void) | null = null;
+  public onPeerConnected: (() => void) | null = null;
+
+  private async getPublicIP(): Promise<string> {
+    try {
+      const response = await fetch('https://api.ipify.org?format=json');
+      const data = await response.json();
+      return data.ip || 'unknown-network';
+    } catch (e) {
+      console.warn('[Sync] Could not fetch public IP for lock, using fallback', e);
+      return 'local-fallback';
+    }
+  }
 
   async initialize(role: 'DJ' | 'PARTICIPANT', room?: string): Promise<string> {
     this.isHost = role === 'DJ';
@@ -21,7 +34,39 @@ class SyncService {
       this.destroy();
     }
 
+    // Step 1: Singleton Lock Enforcement for DJs
+    if (this.isHost && !room) {
+      const ip = await this.getPublicIP();
+      const lockId = `singmode-lock-${btoa(ip).replace(/=/g, '').substr(0, 12)}`;
+
+      console.log(`[Sync] Attempting to claim network lock: ${lockId}`);
+
+      const lockAcquired = await new Promise<boolean>((resolve) => {
+        const tempLock = new Peer(lockId, { debug: 1 });
+        tempLock.on('open', () => {
+          this.lockPeer = tempLock;
+          resolve(true);
+        });
+        tempLock.on('error', (err) => {
+          if (err.type === 'unavailable-id') {
+            resolve(false);
+          } else {
+            // Some other error, might be network. We shouldn't block DJing just because signaling is down
+            // But usually this means we can't be sure about the lock.
+            resolve(true);
+          }
+          tempLock.destroy();
+        });
+      });
+
+      if (!lockAcquired) {
+        throw new Error('COLLISION: A SingMode DJ session is already active on this network.');
+      }
+    }
+
     return new Promise((resolve, reject) => {
+      // Step 2: Initialize actual Data Peer
+      // For DJs, always generate a fresh unique ID for the QR code
       const id = this.isHost ? (room || `singmode-${Math.random().toString(36).substr(2, 6)}`) : undefined;
 
       this.peer = new Peer(id, {
@@ -59,7 +104,7 @@ class SyncService {
         console.error('[Sync] Peer error:', err.type, err);
 
         if (err.type === 'unavailable-id') {
-          console.warn('[Sync] ID unavailable, retrying as random...');
+          // This should be rare now with random IDs, but if it happens, try again
           this.destroy();
           this.initialize(role).then(resolve).catch(reject);
         } else if (err.type === 'network' || err.type === 'server-error' || err.message?.includes('Lost connection')) {
@@ -90,6 +135,10 @@ class SyncService {
       if (this.peer && this.peer.disconnected && !this.peer.destroyed) {
         this.peer.reconnect();
       }
+      // Keep lock peer alive too if it exists
+      if (this.lockPeer && this.lockPeer.disconnected && !this.lockPeer.destroyed) {
+        this.lockPeer.reconnect();
+      }
     }, 5000);
   }
 
@@ -110,14 +159,16 @@ class SyncService {
       console.log(`[Sync] Data connection established with: ${conn.peer}`);
       this.connections.set(conn.peer, conn);
       if (this.onConnectionStatus) this.onConnectionStatus('connected');
+      if (this.isHost && this.onPeerConnected) this.onPeerConnected();
     });
 
     conn.on('data', (data: unknown) => {
-      if (this.isHost && data && typeof data === 'object' && 'type' in data) {
-        if (this.onActionReceived) this.onActionReceived(data as RemoteAction);
-      }
-      else if (!this.isHost && data && typeof data === 'object' && 'participants' in data) {
-        if (this.onStateReceived) this.onStateReceived(data as KaraokeSession);
+      if (data && typeof data === 'object') {
+        if ('type' in data) {
+          if (this.onActionReceived) this.onActionReceived(data as RemoteAction);
+        } else if ('participants' in data) {
+          if (this.onStateReceived) this.onStateReceived(data as KaraokeSession);
+        }
       }
     });
 
@@ -144,6 +195,15 @@ class SyncService {
     });
   }
 
+  broadcastAction(action: RemoteAction) {
+    if (!this.isHost) return;
+    this.connections.forEach(conn => {
+      if (conn.open) {
+        conn.send(action);
+      }
+    });
+  }
+
   sendAction(action: RemoteAction) {
     if (this.isHost || !this.peer) return;
     this.connections.forEach(conn => {
@@ -164,6 +224,10 @@ class SyncService {
     if (this.peer) {
       this.peer.destroy();
       this.peer = null;
+    }
+    if (this.lockPeer) {
+      this.lockPeer.destroy();
+      this.lockPeer = null;
     }
   }
 }
