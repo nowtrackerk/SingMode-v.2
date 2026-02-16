@@ -87,7 +87,7 @@ const App: React.FC = () => {
 
   if (loading) return (
     <div className="min-h-screen bg-black flex items-center justify-center">
-      <div className="w-16 h-16 border-4 border-[#FF00FF] border-t-transparent rounded-full animate-spin neon-border-pink"></div>
+      <div className="w-16 h-16 border-4 border-t-transparent rounded-full animate-spin neon-border-pink" style={{ borderColor: 'var(--neon-pink)', borderTopColor: 'transparent' }}></div>
     </div>
   );
 
@@ -106,10 +106,10 @@ const App: React.FC = () => {
             <div className="flex justify-center mb-8">
               <img src="IGK.jpeg" alt="Island Groove" className="w-40 h-40 rounded-full neon-border-pink" />
             </div>
-            <h1 className="text-8xl font-black font-bungee-shade mb-4 rainbow-text tracking-tighter neon-pulse">
+            <h1 className="text-8xl font-black font-bungee mb-4 rainbow-text tracking-tighter neon-pulse">
               SINGMODE
             </h1>
-            <p className="text-[#39FF14] text-xl font-bold tracking-wide uppercase neon-glow-yellow">KARAOKE LOUNGE</p>
+            <p className="text-[#FFD700] text-xl font-bold tracking-wide uppercase neon-glow-yellow">KARAOKE LOUNGE</p>
           </div>
 
           {error && (
@@ -125,26 +125,26 @@ const App: React.FC = () => {
             {!isQRCodeUser && (
               <button
                 onClick={() => handleManualRoleSelect('DJ')}
-                className="group p-10 bg-black/80 border-2 border-[#FF00FF] rounded-[2.5rem] text-left hover:border-[#00FFFF] hover:bg-black transition-all shadow-2xl neon-border-pink hover:neon-border-cyan"
+                className="group p-10 bg-black/80 border-2 rounded-[2.5rem] text-left hover:bg-black transition-all shadow-2xl neon-border-pink hover:neon-border-cyan"
               >
-                <div className="w-16 h-16 bg-black border-2 border-[#39FF14] rounded-2xl flex items-center justify-center text-3xl mb-6 group-hover:scale-110 group-hover:border-[#00FF00] transition-all neon-border-yellow">🎧</div>
-                <h2 className="text-3xl font-black text-[#FF00FF] mb-2 font-space-mono uppercase tracking-tight neon-glow-pink">DJ CONSOLE</h2>
-                <p className="text-[#00FFFF] font-medium">Coordinate the room. Approve tracks and manage the rotation.</p>
+                <div className="w-16 h-16 bg-black border-2 rounded-2xl flex items-center justify-center text-3xl mb-6 group-hover:scale-110 transition-all neon-border-yellow group-hover:neon-border-green">🎧</div>
+                <h2 className="text-3xl font-black mb-2 font-righteous uppercase tracking-tight neon-glow-pink" style={{ color: 'var(--neon-pink)' }}>DJ CONSOLE</h2>
+                <p className="font-medium" style={{ color: 'var(--neon-cyan)' }}>Coordinate the room. Approve tracks and manage the rotation.</p>
               </button>
             )}
 
             <button
               onClick={() => handleManualRoleSelect('PARTICIPANT')}
-              className="group p-10 bg-black/80 border-2 border-[#00FFFF] rounded-[2.5rem] text-left hover:border-[#39FF14] hover:bg-black transition-all shadow-2xl neon-border-cyan hover:neon-border-yellow"
+              className="group p-10 bg-black/80 border-2 rounded-[2.5rem] text-left hover:bg-black transition-all shadow-2xl neon-border-cyan hover:neon-border-yellow"
             >
-              <div className="w-16 h-16 bg-black border-2 border-[#9D00FF] rounded-2xl flex items-center justify-center text-3xl mb-6 group-hover:scale-110 group-hover:border-[#00FF00] transition-all">🎤</div>
-              <h2 className="text-3xl font-black text-[#00FFFF] mb-2 font-space-mono uppercase tracking-tight neon-glow-cyan">SINGER UI</h2>
-              <p className="text-[#39FF14] font-medium">Request songs, star your favorites, and prepare to perform.</p>
+              <div className="w-16 h-16 bg-black border-2 rounded-2xl flex items-center justify-center text-3xl mb-6 group-hover:scale-110 transition-all neon-border-purple group-hover:neon-border-green">🎤</div>
+              <h2 className="text-3xl font-black mb-2 font-righteous uppercase tracking-tight neon-glow-cyan" style={{ color: 'var(--neon-cyan)' }}>SINGER UI</h2>
+              <p className="font-medium" style={{ color: 'var(--neon-yellow)' }}>Request songs, star your favorites, and prepare to perform.</p>
             </button>
           </div>
 
-          <div className="mt-16 p-8 bg-black/60 border-2 border-[#FF00FF] rounded-[2.5rem] flex flex-col md:flex-row items-center gap-8 backdrop-blur-sm neon-border-pink">
-            <div className="bg-white p-3 rounded-2xl shrink-0 shadow-2xl border-4 border-[#39FF14]">
+          <div className="mt-16 p-8 bg-black/60 border-2 rounded-[2.5rem] flex flex-col md:flex-row items-center gap-8 backdrop-blur-sm neon-border-pink">
+            <div className="bg-white p-3 rounded-2xl shrink-0 shadow-2xl border-4 neon-border-yellow" style={{ borderColor: 'var(--neon-yellow)' }}>
               <img
                 src={qrCodeUrl}
                 alt="Join QR Code"
@@ -154,7 +154,7 @@ const App: React.FC = () => {
               />
             </div>
             <div className="text-center md:text-left flex-1">
-              <strong className="text-[#39FF14] block mb-2 uppercase tracking-[0.3em] text-[10px] font-black neon-glow-yellow">SCAN TO JOIN</strong>
+              <strong className="text-[#FFD700] block mb-2 uppercase tracking-[0.3em] text-[10px] font-black neon-glow-yellow">SCAN TO JOIN</strong>
               <div className="text-[#00FFFF] text-lg font-mono break-all">{currentUrl}</div>
               {isUsingLocalhost && (
                 <div className="mt-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
@@ -218,19 +218,20 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-black text-white">
       <SyncBadge role={role} />
-      <nav className="border-b-2 border-[#FF00FF] bg-black/95 sticky top-0 z-40 backdrop-blur-xl neon-border-pink">
+      <nav className="border-b-2 border-[#FF1493] bg-black/95 sticky top-0 z-40 backdrop-blur-xl neon-border-pink">
         <div className="max-w-6xl mx-auto px-6 h-20 flex items-center justify-between">
           <div onClick={() => setRole('SELECT')} className="cursor-pointer">
             <div className="flex items-center gap-3">
               <img src="IGK.jpeg" alt="Logo" className="w-12 h-12 rounded-full" />
-              <span className="font-bungee-shade text-xl rainbow-text">SINGMODE</span>
+              <span className="font-bungee text-xl rainbow-text">SINGMODE</span>
             </div>
           </div>
           <div className="flex items-center gap-6">
 
             <button
               onClick={() => { setRole('SELECT'); setError(null); }}
-              className="text-[10px] font-black text-[#00FFFF] hover:text-[#39FF14] uppercase tracking-widest px-4 py-2 border-2 border-[#00FFFF] rounded-xl transition-all neon-border-cyan"
+              className="text-[10px] font-black uppercase tracking-widest px-4 py-2 border-2 rounded-xl transition-all neon-border-cyan neon-glow-cyan"
+              style={{ color: 'var(--neon-cyan)', borderColor: 'var(--neon-cyan)' }}
             >
               EXIT {role}
             </button>

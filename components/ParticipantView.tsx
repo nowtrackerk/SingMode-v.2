@@ -201,17 +201,17 @@ const ParticipantView: React.FC = () => {
     return (
       <div className="max-w-md mx-auto p-8 flex flex-col items-center justify-center min-h-[85vh] text-center animate-in fade-in duration-700">
         <div className="w-24 h-24 bg-pink-500 neon-border-pink rounded-3xl flex items-center justify-center mb-10 shadow-2xl shadow-pink-500/20">
-          <span className="text-5xl font-black text-white neon-glow-pink font-bungee-shade">SM</span>
+          <span className="text-5xl font-black text-white neon-glow-pink font-bungee">SM</span>
         </div>
-        <h1 className="text-4xl font-black font-bungee-shade text-white mb-3 uppercase tracking-tighter">
+        <h1 className="text-4xl font-black font-bungee text-white mb-3 uppercase tracking-tighter neon-glow-pink">
           Activate <span className="rainbow-text">SingMode</span>
         </h1>
-        <p className="text-cyan-400 font-space-mono mb-10 uppercase tracking-widest text-[10px] font-bold neon-glow-cyan">Claim your session handle.</p>
+        <p className="text-cyan-400 font-righteous mb-10 uppercase tracking-widest text-[10px] font-bold neon-glow-cyan">Claim your session handle.</p>
 
         <form onSubmit={handleAuth} className="w-full space-y-5 bg-black/60 p-8 rounded-3xl border border-pink-500/30 shadow-3xl backdrop-blur-md">
           {authError && <div className="bg-rose-500/10 border border-rose-500/30 text-rose-500 text-[10px] py-3 px-4 rounded-xl font-black uppercase tracking-widest">{authError}</div>}
           <div>
-            <label className="block text-[10px] font-black text-cyan-400 uppercase tracking-widest mb-3 text-left font-space-mono">Your Handle</label>
+            <label className="block text-[10px] font-black text-cyan-400 uppercase tracking-widest mb-3 text-left font-righteous">Your Handle</label>
             <input type="text" required value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. VocalistPrime" className="w-full bg-black border border-slate-800 rounded-2xl px-6 py-4 text-white font-bold focus:border-cyan-400 outline-none transition-all shadow-inner" />
           </div>
 
@@ -225,10 +225,10 @@ const ParticipantView: React.FC = () => {
             <div className="h-px flex-1 bg-white"></div>
           </div>
           <div>
-            <label className="block text-[10px] font-black text-cyan-400 uppercase tracking-widest mb-3 text-left font-space-mono">Passkey (Optional)</label>
+            <label className="block text-[10px] font-black text-cyan-400 uppercase tracking-widest mb-3 text-left font-righteous">Passkey (Optional)</label>
             <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" className="w-full bg-black border border-slate-800 rounded-2xl px-6 py-4 text-white font-bold focus:border-cyan-400 outline-none transition-all shadow-inner" />
           </div>
-          <button type="submit" className="w-full py-5 mt-4 bg-pink-500 text-white rounded-2xl font-black text-lg shadow-2xl shadow-pink-900/40 active:scale-95 transition-all uppercase tracking-widest neon-border-pink font-space-mono">
+          <button type="submit" className="w-full py-5 mt-4 bg-pink-500 text-white rounded-2xl font-black text-lg shadow-2xl shadow-pink-900/40 active:scale-95 transition-all uppercase tracking-widest neon-border-pink font-righteous">
             {isLoginMode ? 'Authorize' : 'Initialize'}
           </button>
           <button type="button" onClick={() => { setIsLoginMode(!isLoginMode); setAuthError(''); }} className="text-slate-600 hover:text-cyan-400 text-[10px] font-black uppercase tracking-[0.2em] pt-6 block mx-auto">{isLoginMode ? "New User?" : "Back to Auth"}</button>
@@ -249,8 +249,8 @@ const ParticipantView: React.FC = () => {
         </div>
         <div className="flex flex-col items-center text-center">
           <div className="text-[10px] text-cyan-400 font-black uppercase tracking-[0.4em] mb-2 px-4 py-1 bg-cyan-400/5 rounded-full border border-cyan-400/10 neon-glow-cyan">Secure Connection</div>
-          <h2 className="text-4xl font-black text-white tracking-tighter uppercase leading-none mt-2 font-bungee-shade neon-glow-pink">{participant.name}</h2>
-          <div className="text-[10px] text-yellow-400 font-bold uppercase tracking-widest mt-4 font-space-mono neon-glow-yellow">Authorized Performer Account</div>
+          <h2 className="text-4xl font-black text-white tracking-tighter uppercase leading-none mt-2 font-bungee neon-glow-pink">{participant.name}</h2>
+          <div className="text-[10px] text-yellow-400 font-bold uppercase tracking-widest mt-4 font-righteous neon-glow-yellow">Authorized Performer Account</div>
         </div>
       </header>
 
@@ -260,8 +260,8 @@ const ParticipantView: React.FC = () => {
       {session.currentRound && session.currentRound.length > 0 && (
         <section className="animate-in fade-in slide-in-from-top-2 space-y-4">
           <div className="flex items-center gap-3 px-2">
-            <div className="w-2 h-2 bg-pink-500 rounded-full animate-ping shadow-[0_0_10px_#FF1493]"></div>
-            <h3 className="text-white font-black uppercase tracking-widest text-[10px] font-space-mono neon-glow-cyan">On Stage Now</h3>
+            <div className="w-2 h-2 bg-pink-500 rounded-full animate-ping shadow-[0_0_10px_var(--neon-pink)]"></div>
+            <h3 className="text-white font-black uppercase tracking-widest text-[10px] font-righteous neon-glow-cyan">On Stage Now</h3>
           </div>
           <div className="grid gap-4">
             {session.currentRound.map((song, i) => (
@@ -269,12 +269,12 @@ const ParticipantView: React.FC = () => {
                 <div className="flex justify-between items-start">
                   <div className="min-w-0 pr-2">
                     <div className="flex items-center gap-2 mb-1">
-                      <div className={`font-black tracking-tight uppercase truncate font-space-mono ${i === 0 ? 'text-white text-lg neon-glow-pink' : 'text-slate-300'}`}>
+                      <div className={`font-black tracking-tight uppercase truncate font-outfit ${i === 0 ? 'text-white text-lg neon-glow-pink' : 'text-slate-300'}`}>
                         <span className="text-cyan-400 mr-2 text-sm opacity-50 font-normal">#{song.requestNumber}</span>{song.songName}
                       </div>
                       <VideoLink url={song.youtubeUrl} />
                     </div>
-                    <div className="text-[10px] text-cyan-400 font-bold uppercase tracking-widest truncate font-space-mono">{song.artist}</div>
+                    <div className="text-[10px] text-cyan-400 font-bold uppercase tracking-widest truncate font-righteous">{song.artist}</div>
                     <div className="mt-3 text-[11px] font-black text-yellow-400 uppercase tracking-tighter neon-glow-yellow">{song.participantName}</div>
                   </div>
                   {i === 0 && (
@@ -292,7 +292,7 @@ const ParticipantView: React.FC = () => {
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all font-space-mono ${activeTab === tab ? 'bg-cyan-400 text-black shadow-xl shadow-cyan-900/20 neon-border-cyan' : 'text-slate-500 hover:text-cyan-400'
+            className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all font-righteous ${activeTab === tab ? 'bg-cyan-400 text-black shadow-xl shadow-cyan-900/20 neon-border-cyan' : 'text-slate-500 hover:text-cyan-400'
               }`}
           >
             {tab === 'ROTATION' ? 'Rotation' :
@@ -305,7 +305,7 @@ const ParticipantView: React.FC = () => {
 
       <button
         onClick={() => { setPrefillData(null); setShowRequestForm(true); }}
-        className="w-full py-5 bg-pink-500 text-white rounded-2xl font-black text-lg shadow-3xl shadow-pink-900/40 uppercase tracking-widest active:scale-95 transition-all neon-border-pink font-space-mono"
+        className="w-full py-5 bg-pink-500 text-white rounded-2xl font-black text-lg shadow-3xl shadow-pink-900/40 uppercase tracking-widest active:scale-95 transition-all neon-border-pink font-righteous"
       >
         + Queue Track
       </button>
@@ -314,7 +314,7 @@ const ParticipantView: React.FC = () => {
         <section className="flex justify-center">
           <button
             onClick={toggleStatus}
-            className={`w-full py-8 rounded-[2.5rem] font-black text-2xl uppercase tracking-[0.2em] transition-all border-2 flex flex-col items-center justify-center gap-2 group shadow-2xl relative overflow-hidden font-bungee-shade ${participant.status === ParticipantStatus.READY
+            className={`w-full py-8 rounded-[2.5rem] font-black text-2xl uppercase tracking-[0.2em] transition-all border-2 flex flex-col items-center justify-center gap-2 group shadow-2xl relative overflow-hidden font-bungee ${participant.status === ParticipantStatus.READY
               ? 'bg-cyan-400 text-black border-cyan-300 shadow-cyan-900/40 scale-105 neon-border-cyan'
               : 'bg-black text-slate-500 border-white/10 hover:border-cyan-400/50'
               }`}
@@ -323,7 +323,7 @@ const ParticipantView: React.FC = () => {
               <div className="absolute inset-0 bg-gradient-to-t from-white/20 to-transparent opacity-50 group-hover:opacity-80 transition-opacity" />
             )}
             <span className="relative z-10">{participant.status === ParticipantStatus.READY ? 'IM READY' : 'CLICK TO START'}</span>
-            <span className={`relative z-10 text-[10px] tracking-[0.4em] font-black font-space-mono ${participant.status === ParticipantStatus.READY ? 'opacity-80' : 'opacity-30'}`}>
+            <span className={`relative z-10 text-[10px] tracking-[0.4em] font-black font-righteous ${participant.status === ParticipantStatus.READY ? 'opacity-80' : 'opacity-30'}`}>
               {participant.status === ParticipantStatus.READY ? 'BROADCASTING STATUS' : 'CURRENTLY STANDBY'}
             </span>
           </button>
@@ -361,8 +361,8 @@ const ParticipantView: React.FC = () => {
                   session.requests.filter(r => r.status === RequestStatus.APPROVED && !r.isInRound).map(req => (
                     <div key={req.id} className="bg-black/60 border border-white/10 p-5 rounded-2xl flex justify-between items-center group backdrop-blur-sm">
                       <div className="min-w-0 pr-2">
-                        <div className="text-white font-bold uppercase truncate text-sm font-space-mono">{req.songName}</div>
-                        <div className="text-[9px] text-cyan-400 uppercase tracking-widest flex items-center gap-1.5 font-space-mono">
+                        <div className="text-white font-bold uppercase truncate text-sm font-outfit">{req.songName}</div>
+                        <div className="text-[9px] text-cyan-400 uppercase tracking-widest flex items-center gap-1.5 font-righteous">
                           {req.artist} • <span className="text-pink-500/80">{req.participantName}</span>
                         </div>
                       </div>
@@ -371,7 +371,7 @@ const ParticipantView: React.FC = () => {
                   ))
                 ) : (
                   <div className="text-center py-10 opacity-40 bg-black/40 rounded-3xl border border-dashed border-cyan-400/20">
-                    <p className="text-[10px] font-black uppercase tracking-widest font-space-mono text-cyan-400">No tracks in queue</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest font-righteous text-cyan-400">No tracks in queue</p>
                   </div>
                 )}
               </div>
@@ -387,12 +387,12 @@ const ParticipantView: React.FC = () => {
                   <div className="flex justify-between items-start mb-4">
                     <div className="min-w-0 pr-2">
                       <div className="flex items-center gap-2 mb-1">
-                        <div className="font-black text-white tracking-tight uppercase truncate font-space-mono">
+                        <div className="font-black text-white tracking-tight uppercase truncate font-outfit">
                           <span className="text-cyan-400 mr-2 text-sm opacity-50 font-normal">#{req.requestNumber}</span>{req.songName}
                         </div>
                         <VideoLink url={req.youtubeUrl} />
                       </div>
-                      <div className="text-[10px] text-cyan-400 font-bold uppercase tracking-widest truncate font-space-mono">{req.artist} • <span className={req.type === RequestType.SINGING ? 'text-pink-500' : 'text-purple-400'}>{req.type}</span></div>
+                      <div className="text-[10px] text-cyan-400 font-bold uppercase tracking-widest truncate font-righteous">{req.artist} • <span className={req.type === RequestType.SINGING ? 'text-pink-500' : 'text-purple-400'}>{req.type}</span></div>
                     </div>
                     <div className="text-right flex flex-col items-end gap-2 shrink-0">
                       <div className={`text-[8px] font-black px-3 py-1 rounded-full uppercase tracking-[0.2em] border ${req.status === RequestStatus.APPROVED ? (req.isInRound ? 'bg-pink-500/10 text-pink-500 border-pink-500/20 neon-glow-pink' : 'bg-cyan-400/10 text-cyan-400 border-cyan-400/20 neon-glow-cyan') : 'bg-black text-slate-600 border-white/10'}`}>
@@ -400,8 +400,8 @@ const ParticipantView: React.FC = () => {
                       </div>
                       {req.status === RequestStatus.PENDING && (
                         <div className="flex gap-4">
-                          <button onClick={() => setEditingRequest(req)} className="text-[9px] font-black text-cyan-400 hover:text-white uppercase tracking-widest underline underline-offset-4 font-space-mono">Edit</button>
-                          <button onClick={async () => { await deleteRequest(req.id); await refresh(); }} className="text-[9px] font-black text-rose-500/60 hover:text-rose-500 uppercase tracking-widest px-2 font-space-mono">Cancel</button>
+                          <button onClick={() => setEditingRequest(req)} className="text-[9px] font-black text-cyan-400 hover:text-white uppercase tracking-widest underline underline-offset-4 font-righteous">Edit</button>
+                          <button onClick={async () => { await deleteRequest(req.id); await refresh(); }} className="text-[9px] font-black text-rose-500/60 hover:text-rose-500 uppercase tracking-widest px-2 font-righteous">Cancel</button>
                         </div>
                       )}
                     </div>
@@ -410,7 +410,7 @@ const ParticipantView: React.FC = () => {
               ))}
               {myRequests.length === 0 && (
                 <div className="text-center py-20 opacity-40">
-                  <p className="text-xs font-bold uppercase italic font-space-mono text-cyan-400/50">Your rotation is empty</p>
+                  <p className="text-xs font-bold uppercase italic font-righteous text-cyan-400/50">Your rotation is empty</p>
                 </div>
               )}
             </div>
@@ -427,7 +427,7 @@ const ParticipantView: React.FC = () => {
                   placeholder="SEARCH SONGBOOK..."
                   value={librarySearchQuery}
                   onChange={(e) => setLibrarySearchQuery(e.target.value)}
-                  className="w-full bg-black/80 border border-cyan-400/30 rounded-2xl py-4 pl-12 pr-4 text-xs font-black uppercase tracking-widest text-white placeholder:text-slate-600 focus:outline-none focus:neon-border-cyan transition-all backdrop-blur-xl font-space-mono"
+                  className="w-full bg-black/80 border border-cyan-400/30 rounded-2xl py-4 pl-12 pr-4 text-xs font-black uppercase tracking-widest text-white placeholder:text-slate-600 focus:outline-none focus:neon-border-cyan transition-all backdrop-blur-xl font-righteous"
                 />
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-cyan-400 group-focus-within:neon-glow-cyan transition-colors">🔍</span>
               </div>
@@ -458,15 +458,15 @@ const ParticipantView: React.FC = () => {
                   <div key={song.id} className="bg-black/60 border border-white/10 p-5 rounded-3xl flex justify-between items-center group hover:neon-border-pink transition-all backdrop-blur-sm">
                     <div className="min-w-0 pr-2">
                       <div className="flex items-center gap-2">
-                        <div className="text-white font-bold uppercase truncate font-space-mono">{song.songName}</div>
+                        <div className="text-white font-bold uppercase truncate font-outfit">{song.songName}</div>
                         {song.isFavorite && <span className="text-[10px]" title="Personal Favorite">⭐️</span>}
                       </div>
-                      <div className="text-[9px] text-cyan-400 uppercase tracking-widest font-space-mono">{song.artist}</div>
+                      <div className="text-[9px] text-cyan-400 uppercase tracking-widest font-righteous">{song.artist}</div>
                     </div>
                     <div className="flex gap-2">
                       <button
                         onClick={() => { setPrefillData({ ...song }); setShowRequestForm(true); }}
-                        className="bg-pink-500 text-white px-3 py-1.5 rounded-xl font-black text-[9px] uppercase tracking-widest shadow-lg shadow-pink-500/10 active:scale-95 transition-all font-space-mono neon-border-pink"
+                        className="bg-pink-500 text-white px-3 py-1.5 rounded-xl font-black text-[9px] uppercase tracking-widest shadow-lg shadow-pink-500/10 active:scale-95 transition-all font-righteous neon-border-pink"
                       >
                         Add
                       </button>
@@ -500,14 +500,14 @@ const ParticipantView: React.FC = () => {
             {userProfile.personalHistory.map((h, i) => (
               <div key={i} className="bg-black/60 border border-white/10 p-5 rounded-3xl flex justify-between items-center group backdrop-blur-sm hover:neon-border-yellow transition-all">
                 <div className="min-w-0 pr-2">
-                  <div className="text-white font-bold uppercase truncate font-space-mono">
+                  <div className="text-white font-bold uppercase truncate font-outfit">
                     <span className="text-cyan-400 mr-2 text-sm opacity-50 font-normal">#{h.requestNumber}</span>{h.songName}
                   </div>
-                  <div className="text-[9px] text-yellow-400 uppercase tracking-widest font-space-mono">{h.artist}</div>
+                  <div className="text-[9px] text-yellow-400 uppercase tracking-widest font-righteous">{h.artist}</div>
                 </div>
                 <button
                   onClick={() => { setPrefillData({ ...h, type: RequestType.SINGING }); setShowRequestForm(true); }}
-                  className="bg-white/5 hover:bg-yellow-400 hover:text-black hover:border-yellow-400 text-white px-3 py-1.5 rounded-xl font-black text-[9px] uppercase tracking-widest border border-white/10 transition-all font-space-mono"
+                  className="bg-white/5 hover:bg-yellow-400 hover:text-black hover:border-yellow-400 text-white px-3 py-1.5 rounded-xl font-black text-[9px] uppercase tracking-widest border border-white/10 transition-all font-righteous"
                 >
                   Repeat
                 </button>
@@ -529,8 +529,8 @@ const ParticipantView: React.FC = () => {
         >
           <div className="w-16 h-16 bg-pink-500/10 border border-pink-500/20 rounded-2xl flex items-center justify-center text-3xl group-hover:scale-110 transition-transform">📱</div>
           <div className="text-center">
-            <h4 className="text-xl font-black text-white uppercase tracking-tight font-bungee-shade">Invite Friends to Sing</h4>
-            <p className="text-[10px] text-cyan-400 font-bold uppercase tracking-[0.2em] mt-1 group-hover:neon-glow-cyan transition-colors font-space-mono">Tap to show session QR code</p>
+            <h4 className="text-xl font-black text-white uppercase tracking-tight font-bungee">Invite Friends to Sing</h4>
+            <p className="text-[10px] text-cyan-400 font-bold uppercase tracking-[0.2em] mt-1 group-hover:neon-glow-cyan transition-colors font-righteous">Tap to show session QR code</p>
           </div>
         </button>
       </footer>
@@ -542,11 +542,11 @@ const ParticipantView: React.FC = () => {
             <div className="bg-white p-6 rounded-[2rem] inline-block mb-8 shadow-2xl">
               <img src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(roomJoinUrl)}&bgcolor=ffffff`} alt="Room QR" className="w-56 h-56" />
             </div>
-            <h3 className="text-2xl font-black text-white uppercase tracking-tighter mb-2 leading-none font-bungee-shade">Invite Others</h3>
-            <p className="text-yellow-400 text-[10px] font-bold uppercase tracking-widest mb-8 font-space-mono neon-glow-yellow">Scan to join this SingMode session</p>
+            <h3 className="text-2xl font-black text-white uppercase tracking-tighter mb-2 leading-none font-bungee">Invite Others</h3>
+            <p className="text-yellow-400 text-[10px] font-bold uppercase tracking-widest mb-8 font-righteous neon-glow-yellow">Scan to join this SingMode session</p>
             <button
               onClick={() => setShowQrModal(false)}
-              className="w-full py-4 bg-cyan-400 text-black rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-cyan-900/20 font-space-mono"
+              className="w-full py-4 bg-cyan-400 text-black rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-cyan-900/20 font-righteous"
             >
               Done
             </button>

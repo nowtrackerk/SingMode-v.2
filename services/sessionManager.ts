@@ -420,13 +420,6 @@ export const loginUser = async (name: string, password?: string): Promise<{ succ
   if (found.password && found.password !== password) {
     return { success: false, error: "This handle is protected. Incorrect passkey." };
   }
-  // For Guest accounts (no password), only allow login if the device already owns this profile
-  if (!found.password) {
-    const currentProfile = await getUserProfile();
-    if (!currentProfile || currentProfile.id !== found.id) {
-      return { success: false, error: "This Guest handle is taken. Please choose another." };
-    }
-  }
   await storage.set(PROFILE_KEY, found);
   return { success: true, profile: found };
 };

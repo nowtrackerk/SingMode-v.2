@@ -556,11 +556,11 @@ const DJView: React.FC<DJViewProps> = () => {
           <div className="relative group">
             <div className="absolute -inset-1 bg-gradient-to-r from-pink-500 to-cyan-500 rounded-lg blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200"></div>
             <div className="relative">
-              <h1 className="text-5xl font-black font-bungee-shade text-white flex items-center gap-3 uppercase tracking-tighter neon-glow-pink">
+              <h1 className="text-5xl font-black font-bungee text-white flex items-center gap-3 uppercase tracking-tighter neon-glow-pink">
                 SINGMODE <span className="text-cyan-400 neon-glow-cyan">COMMAND</span>
               </h1>
-              <p className="text-slate-500 uppercase tracking-[0.4em] text-[9px] font-space-mono mt-1 opacity-80">
-                <span className="text-pink-500">Isle Groove</span> Operations / <span className="text-cyan-400">{session.participants.length} Performers</span>
+              <p className="text-slate-500 uppercase tracking-[0.4em] text-[9px] font-righteous mt-1 opacity-80">
+                <span className="text-pink-500 neon-glow-pink">Isle Groove</span> Operations / <span className="text-cyan-400 neon-glow-cyan">{session.participants.length} Performers</span>
               </p>
             </div>
           </div>
@@ -737,7 +737,7 @@ const DJView: React.FC<DJViewProps> = () => {
                             <button onClick={() => setRequestToEdit(req)} className="text-slate-600 hover:text-white text-xs ml-2 transition-colors">✏️</button>
                           </div>
                         </div>
-                        <div className="text-xl font-black text-white uppercase truncate tracking-tight font-righteous mb-1"><span className="text-cyan-400 opacity-50 mr-2 text-sm">#{req.requestNumber}</span>{req.songName}</div>
+                        <div className="text-xl font-black text-white uppercase truncate tracking-tight font-righteous mb-1">{req.songName}</div>
                         <div className="text-cyan-400/60 text-[10px] uppercase font-bold tracking-widest font-righteous">{req.artist}</div>
                       </div>
                       <div className="flex items-center justify-between border-t border-white/5 pt-5 mt-auto">
@@ -757,7 +757,7 @@ const DJView: React.FC<DJViewProps> = () => {
               <div className="grid md:grid-cols-2 gap-8">
                 <div className="grid md:grid-cols-2 gap-8">
                   <section className="bg-black/40 rounded-[2rem] p-8 border border-white/5 backdrop-blur-sm shadow-xl">
-                    <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em] mb-8 px-2 font-righteous">Ready to Sing</h3>
+                    <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em] mb-8 px-2 font-righteous neon-glow-cyan">Ready to Sing</h3>
                     <div className="space-y-3">
                       {approvedSinging.map((req, i) => (
                         <div

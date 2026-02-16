@@ -9,34 +9,30 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;700;900&family=Monoton&family=Bungee&family=Bungee+Shade&family=Righteous&family=Space+Mono:wght@400;700&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;700;900&family=Monoton&family=Bungee&family=Righteous&display=swap"
         rel="stylesheet">
     <style>
         :root {
-            /* Midnight Tokyo Palette */
-            --neon-pink: #FF00FF;
-            /* Electric Magenta */
+            /* Neon Color Palette - Island Groove Inspired */
+            --neon-pink: #FF1493;
             --neon-yellow: #FFD700;
-            --neon-green: #39FF14;
-            /* Toxic Green */
+            --neon-green: #00FF00;
             --neon-cyan: #00FFFF;
-            /* Cyan Laser */
             --neon-purple: #9D00FF;
             --neon-orange: #FF6B00;
             --accent-yellow: #FFEB3B;
             --bg-black: #000000;
-            /* Deep Void Black */
             --bg-dark: #0a0a0a;
             --bg-card: #0f0f0f;
         }
 
         body {
-            font-family: 'Space Mono', monospace;
+            font-family: 'Inter', sans-serif;
             background-color: var(--bg-black);
             background-image:
-                radial-gradient(circle at 20% 50%, rgba(255, 0, 255, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 20% 50%, rgba(255, 20, 147, 0.1) 0%, transparent 50%),
                 radial-gradient(circle at 80% 80%, rgba(0, 255, 255, 0.1) 0%, transparent 50%),
-                radial-gradient(circle at 40% 20%, rgba(57, 255, 20, 0.1) 0%, transparent 50%);
+                radial-gradient(circle at 40% 20%, rgba(157, 0, 255, 0.1) 0%, transparent 50%);
             color: #ffffff;
             margin: 0;
             overflow-x: hidden;
@@ -54,70 +50,77 @@
             font-family: 'Bungee', cursive;
         }
 
-        .font-bungee-shade {
-            font-family: 'Bungee Shade', cursive;
-        }
-
         .font-righteous {
             font-family: 'Righteous', cursive;
         }
 
-        .font-space-mono {
-            font-family: 'Space Mono', monospace;
-        }
-
-        /* Neon Glow Effects */
+        /* Neon Glow Effects - Sharpened & Layered */
         .neon-glow-pink {
             text-shadow:
-                0 0 2px var(--neon-pink),
-                0 0 10px var(--neon-pink),
-                0 0 30px var(--neon-pink),
-                0 0 60px var(--neon-pink);
+                0 0 4px rgba(255, 20, 147, 0.4),
+                0 0 12px var(--neon-pink),
+                0 0 25px var(--neon-pink);
         }
 
         .neon-glow-yellow {
             text-shadow:
-                0 0 2px var(--neon-yellow),
-                0 0 10px var(--neon-yellow),
-                0 0 30px var(--neon-yellow);
+                0 0 4px rgba(255, 215, 0, 0.4),
+                0 0 12px var(--neon-yellow),
+                0 0 25px var(--neon-yellow);
         }
 
         .neon-glow-cyan {
             text-shadow:
-                0 0 2px var(--neon-cyan),
-                0 0 10px var(--neon-cyan),
-                0 0 30px var(--neon-cyan);
+                0 0 4px rgba(0, 255, 255, 0.4),
+                0 0 12px var(--neon-cyan),
+                0 0 25px var(--neon-cyan);
         }
 
         .neon-glow-green {
             text-shadow:
-                0 0 2px var(--neon-green),
-                0 0 10px var(--neon-green),
-                0 0 30px var(--neon-green);
+                0 0 4px rgba(0, 255, 0, 0.4),
+                0 0 12px var(--neon-green),
+                0 0 25px var(--neon-green);
         }
 
         .neon-border-pink {
             border: 2px solid var(--neon-pink);
             box-shadow:
-                0 0 10px var(--neon-pink),
-                0 0 20px var(--neon-pink),
-                inset 0 0 10px rgba(255, 20, 147, 0.2);
+                0 0 15px rgba(255, 20, 147, 0.4),
+                0 0 30px rgba(255, 20, 147, 0.2),
+                inset 0 0 10px rgba(255, 20, 147, 0.3);
         }
 
         .neon-border-cyan {
             border: 2px solid var(--neon-cyan);
             box-shadow:
-                0 0 10px var(--neon-cyan),
-                0 0 20px var(--neon-cyan),
-                inset 0 0 10px rgba(0, 255, 255, 0.2);
+                0 0 15px rgba(0, 255, 255, 0.4),
+                0 0 30px rgba(0, 255, 255, 0.2),
+                inset 0 0 10px rgba(0, 255, 255, 0.3);
         }
 
         .neon-border-yellow {
             border: 2px solid var(--neon-yellow);
             box-shadow:
-                0 0 10px var(--neon-yellow),
-                0 0 20px var(--neon-yellow),
-                inset 0 0 10px rgba(255, 215, 0, 0.2);
+                0 0 15px rgba(255, 215, 0, 0.4),
+                0 0 30px rgba(255, 215, 0, 0.2),
+                inset 0 0 10px rgba(255, 215, 0, 0.3);
+        }
+
+        .neon-border-purple {
+            border: 2px solid var(--neon-purple);
+            box-shadow:
+                0 0 15px rgba(157, 0, 255, 0.4),
+                0 0 30px rgba(157, 0, 255, 0.2),
+                inset 0 0 10px rgba(157, 0, 255, 0.3);
+        }
+
+        .neon-border-green {
+            border: 2px solid var(--neon-green);
+            box-shadow:
+                0 0 15px rgba(0, 255, 0, 0.4),
+                0 0 30px rgba(0, 255, 0, 0.2),
+                inset 0 0 10px rgba(0, 255, 0, 0.3);
         }
 
         /* Rainbow Gradient Text */
@@ -147,12 +150,12 @@
             }
         }
 
-        /* Glass Panel with Neon */
+        /* Glass Panel with Neon - Refined translucency */
         .glass-panel {
-            background: rgba(15, 15, 15, 0.8);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 20, 147, 0.3);
-            box-shadow: 0 0 20px rgba(255, 20, 147, 0.1);
+            background: rgba(10, 10, 10, 0.85);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.8);
         }
 
         /* Custom Scrollbar - Neon Style */

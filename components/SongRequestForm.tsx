@@ -46,14 +46,14 @@ const SongRequestForm: React.FC<SongRequestFormProps> = ({
     <form onSubmit={handleSubmit} className="space-y-6 bg-black/80 p-10 rounded-3xl shadow-3xl neon-border-pink animate-in fade-in zoom-in-95 duration-300 backdrop-blur-md">
       <div className="flex justify-between items-start mb-6">
         <div>
-          <h3 className="text-3xl font-black text-white font-bungee-shade uppercase tracking-tighter leading-none neon-glow-pink">{displayTitle}</h3>
-          <p className="text-[9px] text-cyan-400 font-bold uppercase tracking-[0.3em] mt-2 font-space-mono neon-glow-cyan">SingMode Operations</p>
+          <h3 className="text-3xl font-black text-white font-bungee uppercase tracking-tighter leading-none neon-glow-pink">{displayTitle}</h3>
+          <p className="text-[9px] text-cyan-400 font-bold uppercase tracking-[0.3em] mt-2 font-righteous neon-glow-cyan">SingMode Operations</p>
         </div>
       </div>
 
       {showSingerName && (
         <div className="animate-in fade-in slide-in-from-top-2">
-          <label className="block text-[10px] font-black text-cyan-400 uppercase tracking-widest mb-3 ml-2 font-space-mono">Performer Alias</label>
+          <label className="block text-[10px] font-black text-cyan-400 uppercase tracking-widest mb-3 ml-2 font-righteous">Performer Alias</label>
           <input
             type="text"
             required
@@ -67,7 +67,7 @@ const SongRequestForm: React.FC<SongRequestFormProps> = ({
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-[10px] font-black text-cyan-400 uppercase tracking-widest mb-3 ml-2 font-space-mono">Track Title</label>
+          <label className="block text-[10px] font-black text-cyan-400 uppercase tracking-widest mb-3 ml-2 font-righteous">Track Title</label>
           <input
             type="text"
             value={songName}
@@ -77,7 +77,7 @@ const SongRequestForm: React.FC<SongRequestFormProps> = ({
           />
         </div>
         <div>
-          <label className="block text-[10px] font-black text-cyan-400 uppercase tracking-widest mb-3 ml-2 font-space-mono">Artist</label>
+          <label className="block text-[10px] font-black text-cyan-400 uppercase tracking-widest mb-3 ml-2 font-righteous">Artist</label>
           <input
             type="text"
             value={artist}
@@ -89,7 +89,7 @@ const SongRequestForm: React.FC<SongRequestFormProps> = ({
       </div>
 
       <div className="relative pt-2">
-        <label className="block text-[10px] font-black text-cyan-400 uppercase tracking-widest mb-3 ml-2 font-space-mono">Source URL (Override)</label>
+        <label className="block text-[10px] font-black text-cyan-400 uppercase tracking-widest mb-3 ml-2 font-righteous">Source URL (Override)</label>
         <input
           type="url"
           value={youtubeUrl}
@@ -100,14 +100,14 @@ const SongRequestForm: React.FC<SongRequestFormProps> = ({
       </div>
 
       <div>
-        <label className="block text-[10px] font-black text-cyan-400 uppercase tracking-widest mb-3 ml-2 font-space-mono">Mode</label>
+        <label className="block text-[10px] font-black text-cyan-400 uppercase tracking-widest mb-3 ml-2 font-righteous">Mode</label>
         <div className="flex bg-black p-1.5 rounded-2xl border border-slate-800 shadow-inner">
           {(Object.values(RequestType)).map((t) => (
             <button
               key={t}
               type="button"
               onClick={() => setType(t)}
-              className={`flex-1 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all font-space-mono ${type === t
+              className={`flex-1 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all font-righteous ${type === t
                 ? 'bg-cyan-400 text-black shadow-2xl shadow-cyan-900/40 neon-border-cyan'
                 : 'text-slate-600 hover:text-cyan-400'
                 }`}
@@ -122,13 +122,13 @@ const SongRequestForm: React.FC<SongRequestFormProps> = ({
         <button
           type="button"
           onClick={onCancel}
-          className="flex-1 py-5 bg-black hover:bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all border border-white/10 font-space-mono"
+          className="flex-1 py-5 bg-black hover:bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all border border-white/10 font-righteous"
         >
           Cancel
         </button>
         <button
           type="submit"
-          className="flex-[2] py-5 bg-pink-500 hover:bg-pink-400 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-3xl shadow-pink-900/40 transition-all active:scale-95 neon-border-pink font-space-mono"
+          className="flex-[2] py-5 bg-pink-500 hover:bg-pink-400 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-3xl shadow-pink-900/40 transition-all active:scale-95 neon-border-pink font-righteous"
         >
           {submitLabel}
         </button>
