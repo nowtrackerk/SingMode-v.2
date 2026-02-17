@@ -41,6 +41,7 @@ export interface UserProfile {
   favorites: FavoriteSong[];
   personalHistory: SongRequest[];
   createdAt: number;
+  vocalRange?: 'Soprano' | 'Alto' | 'Tenor' | 'Baritone' | 'Bass' | 'Unknown'; // Metadata for A.5
 }
 
 export interface Participant {
@@ -65,7 +66,18 @@ export interface SongRequest {
   createdAt: number;
   isInRound?: boolean;
   playedAt?: number;
+  completedAt?: number;
   aiIntro?: string;
+  message?: string; // Metadata for A.16: User message to DJ
+  duetPartnerId?: string; // Metadata for A.12: Duet Partner ID
+  duetPartnerName?: string; // Metadata for A.12: Duet Partner Name
+}
+
+export interface BannedUser {
+  id: string;
+  name: string;
+  reason: string;
+  bannedAt: number;
 }
 
 export interface ChatMessage {
@@ -98,9 +110,21 @@ export interface KaraokeSession {
   verifiedSongbook: VerifiedSong[];
   isPlayingVideo?: boolean;
   nextRequestNumber: number;
+  maxRequestsPerUser?: number; // Metadata for A.7.1 / C.11
+  bannedUsers?: BannedUser[]; // Metadata for D.6.1
+  brandIdentity?: {
+    venueName: string;
+    logoUrl?: string;
+    isBusinessAccount: boolean;
+  }; // Metadata for B.1 / B.7
+  customTheme?: {
+    primaryNeon: string; // e.g. #ff007f
+    secondaryNeon: string; // e.g. #05d9e8
+    accentNeon: string; // e.g. #feff3f
+  }; // Metadata for B.2
 }
 
-export type ViewRole = 'DJ' | 'PARTICIPANT' | 'STAGE' | 'SELECT' | 'FEATURES';
+export type ViewRole = 'DJ' | 'PARTICIPANT' | 'STAGE' | 'SELECT' | 'FEATURES' | 'ADMIN';
 
 // P2P Sync Types
 export type RemoteActionType =
@@ -115,7 +139,8 @@ export type RemoteActionType =
   | 'REORDER_ROUND'
   | 'REORDER_REQUESTS'
   | 'TOGGLE_FAVORITE'
-  | 'REORDER_PENDING';
+  | 'REORDER_PENDING'
+  | 'REORDER_MY_REQUESTS';
 
 export interface RemoteAction {
   type: RemoteActionType;

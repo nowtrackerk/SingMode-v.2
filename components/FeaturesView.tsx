@@ -3,6 +3,7 @@ import { SingModeLogo } from './common/SingModeLogo';
 
 interface FeaturesViewProps {
     onBack: () => void;
+    onAdminLogin: () => void;
 }
 
 const FeatureCard: React.FC<{ title: string; icon: string; description: string; items: string[] }> = ({ title, icon, description, items }) => (
@@ -24,7 +25,15 @@ const FeatureCard: React.FC<{ title: string; icon: string; description: string; 
     </div>
 );
 
-const FeaturesView: React.FC<FeaturesViewProps> = ({ onBack }) => {
+const FeaturesView: React.FC<FeaturesViewProps> = ({ onBack, onAdminLogin }) => {
+    const handleAdminAttempt = () => {
+        const pass = prompt('ENTER_ENCRYPTION_KEY:');
+        if (pass === 'Organized') {
+            onAdminLogin();
+        } else {
+            alert('PROTOCOL_DENIED: UNAUTHORIZED_ACCESS');
+        }
+    };
     return (
         <div className="min-h-screen bg-[#050510] text-slate-200 p-6 md:p-16 relative overflow-hidden">
             {/* Background Accents */}
@@ -130,6 +139,15 @@ const FeaturesView: React.FC<FeaturesViewProps> = ({ onBack }) => {
                             "Priority Channel"
                         ]}
                     />
+                    <div className="md:col-span-2 lg:col-span-1 border-2 border-dashed border-white/10 rounded-[3.5rem] flex flex-col items-center justify-center p-10 group hover:border-[var(--neon-cyan)] transition-all">
+                        <p className="text-[10px] text-slate-700 font-black uppercase tracking-[0.4em] mb-6 font-righteous group-hover:text-[var(--neon-cyan)]">MANAGEMENT_INTERFACE</p>
+                        <button
+                            onClick={handleAdminAttempt}
+                            className="p-6 bg-black border border-white/5 rounded-2xl text-[10px] font-black uppercase tracking-widest font-righteous text-white/40 hover:text-white hover:border-white transition-all shadow-xl"
+                        >
+                            🔐 AUTHORIZED_ACCESS
+                        </button>
+                    </div>
                 </div>
 
                 {/* CTA */}

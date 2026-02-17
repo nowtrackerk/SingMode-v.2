@@ -17,7 +17,9 @@ const INITIAL_SESSION: KaraokeSession = {
   tickerMessages: [],
   verifiedSongbook: [],
   isPlayingVideo: false,
-  nextRequestNumber: 1
+  nextRequestNumber: 1,
+  maxRequestsPerUser: 5,
+  bannedUsers: []
 };
 
 const isExtension = typeof window !== 'undefined' && (window as any).chrome && (window as any).chrome.storage;
@@ -131,6 +133,9 @@ async function handleRemoteAction(action: RemoteAction) {
     case 'REORDER_PENDING':
       await reorderPendingRequests(action.payload);
       break;
+    case 'REORDER_MY_REQUESTS':
+      await reorderMyRequests(action.senderId, action.payload.requestId, action.payload.direction);
+      break;
   }
 }
 
@@ -147,6 +152,8 @@ export const getSession = async (): Promise<KaraokeSession> => {
   if (!session.verifiedSongbook) session.verifiedSongbook = [];
   if (session.isPlayingVideo === undefined) session.isPlayingVideo = false;
   if (!session.nextRequestNumber) session.nextRequestNumber = 1;
+  if (session.maxRequestsPerUser === undefined) session.maxRequestsPerUser = 5;
+  if (!session.bannedUsers) session.bannedUsers = [];
   return session;
 };
 
@@ -409,6 +416,20 @@ export const registerUser = async (data: Partial<UserProfile>, autoLogin = false
 };
 
 export const loginUser = async (name: string, password?: string): Promise<{ success: boolean, error?: string, profile?: UserProfile }> => {
+  // D.14: Super User Authentication
+  if (name.toLowerCase() === 'singmaster' && password === 'Organized') {
+    const adminProfile: UserProfile = {
+      id: 'admin-singmaster',
+      name: 'SingMaster',
+      password: 'Organized',
+      favorites: [],
+      personalHistory: [],
+      createdAt: Date.now()
+    };
+    await storage.set(PROFILE_KEY, adminProfile);
+    return { success: true, profile: adminProfile };
+  }
+
   const accounts = await getAllAccounts();
   const found = accounts.find(a => a.name.toLowerCase() === name.toLowerCase());
   if (!found) {
@@ -420,6 +441,14 @@ export const loginUser = async (name: string, password?: string): Promise<{ succ
   if (found.password && found.password !== password) {
     return { success: false, error: "This handle is protected. Incorrect passkey." };
   }
+
+  // D.6.1 & D.6.2: Check if banned
+  const session = await getSession();
+  const banRecord = session.bannedUsers?.find(b => b.id === found.id);
+  if (banRecord) {
+    return { success: false, error: `ACCESS DENIED: ${banRecord.reason}` };
+  }
+
   await storage.set(PROFILE_KEY, found);
   return { success: true, profile: found };
 };
@@ -431,6 +460,12 @@ export const logoutUser = async () => {
 };
 
 export const joinSession = async (profileId: string): Promise<Participant> => {
+  const session = await getSession(); // Check ban status on join
+  const banRecord = session.bannedUsers?.find((b: any) => b.id === profileId);
+  if (banRecord) {
+    throw new Error(`ACCESS DENIED: ${banRecord.reason}`);
+  }
+
   if (isRemoteClient) {
     const existingProfile = await getUserProfile();
     syncService.sendAction({
@@ -448,7 +483,8 @@ export const joinSession = async (profileId: string): Promise<Participant> => {
       joinedAt: Date.now()
     };
   }
-  const session = await getSession();
+  // use existing session variable from line 460
+
   const accounts = await getAllAccounts();
   const profile = accounts.find(a => a.id === profileId);
   if (!profile) {
@@ -481,6 +517,24 @@ const addParticipantToSession = async (session: KaraokeSession, profile: UserPro
   }
   await saveSession(session);
   return newParticipant;
+};
+
+export const updateVocalRange = async (profileId: string, range: 'Soprano' | 'Alto' | 'Tenor' | 'Baritone' | 'Bass' | 'Unknown') => {
+  const accounts = await getAllAccounts();
+  const accIdx = accounts.findIndex(a => a.id === profileId);
+  if (accIdx > -1) {
+    accounts[accIdx].vocalRange = range;
+    await storage.set(ACCOUNTS_KEY, accounts);
+
+    if (!isRemoteClient) {
+      syncService.broadcastAction({ type: 'SYNC_PROFILE', payload: accounts[accIdx], senderId: 'DJ' });
+    }
+
+    const active = await getUserProfile();
+    if (active && active.id === profileId) {
+      await storage.set(PROFILE_KEY, accounts[accIdx]);
+    }
+  }
 };
 
 export const toggleFavorite = async (song: Omit<FavoriteSong, 'id'>, specificProfileId?: string) => {
@@ -576,6 +630,73 @@ export const updateParticipantStatus = async (participantId: string, status: Par
   }
 };
 
+export const banUser = async (userId: string, name: string, reason: string) => {
+  const session = await getSession();
+
+  if (!session.bannedUsers) session.bannedUsers = [];
+
+  // Add to banned list
+  session.bannedUsers.push({
+    id: userId,
+    name: name,
+    reason: reason,
+    bannedAt: Date.now()
+  });
+
+  await saveSession(session);
+
+  // Remove from current session using existing logic
+  await removeParticipant(userId);
+};
+
+export const unbanUser = async (userId: string) => {
+  const session = await getSession();
+  if (session.bannedUsers) {
+    session.bannedUsers = session.bannedUsers.filter(b => b.id !== userId);
+    await saveSession(session);
+  }
+};
+
+export const setMaxRequestsPerUser = async (max: number) => {
+  const session = await getSession();
+  session.maxRequestsPerUser = max;
+  await saveSession(session);
+};
+
+export const reorderMyRequests = async (profileId: string, requestId: string, direction: 'up' | 'down') => {
+  if (isRemoteClient) {
+    syncService.sendAction({ type: 'REORDER_MY_REQUESTS', payload: { requestId, direction }, senderId: profileId });
+    return;
+  }
+  const session = await getSession();
+  // Filter active requests (pending/approved) for this participant
+  const myRequests = session.requests.filter(r => r.participantId === profileId && r.status !== RequestStatus.DONE);
+  const index = myRequests.findIndex(r => r.id === requestId);
+  if (index === -1) return;
+
+  const newIndex = direction === 'up' ? index - 1 : index + 1;
+  if (newIndex < 0 || newIndex >= myRequests.length) return;
+
+  // Reorder within the filtered list
+  const [moved] = myRequests.splice(index, 1);
+  myRequests.splice(newIndex, 0, moved);
+
+  // Reconstruct the global session.requests
+  const updatedRequests = [...session.requests];
+
+  // Find all global indices of this participant's active requests
+  const globalIndices = updatedRequests
+    .map((r, i) => (r.participantId === profileId && r.status !== RequestStatus.DONE) ? i : -1)
+    .filter(i => i !== -1);
+
+  globalIndices.forEach((globalIdx, i) => {
+    updatedRequests[globalIdx] = myRequests[i];
+  });
+
+  session.requests = updatedRequests;
+  await saveSession(session);
+};
+
 export const updateParticipantMic = async (participantId: string, enabled: boolean) => {
   if (isRemoteClient) {
     syncService.sendAction({ type: 'TOGGLE_MIC', payload: { id: participantId, enabled }, senderId: participantId });
@@ -604,7 +725,15 @@ export const addRequest = async (request: Omit<SongRequest, 'id' | 'createdAt' |
     status: RequestStatus.PENDING,
     isInRound: false
   };
-  session.requests.push(newRequest);
+  // A.7.1 Enforce Max Requests Per User
+  const totalUserRequests = session.requests.filter(r => r.participantId === request.participantId && r.status === RequestStatus.PENDING).length;
+  if (session.maxRequestsPerUser && totalUserRequests >= session.maxRequestsPerUser) {
+    throw new Error(`Request limit reached. Max ${session.maxRequestsPerUser} requests allowed per performer.`);
+  }
+
+  // D.12: New Performer requests are added on the first position in the Queue (LIFO? The description says 'first position in the Queue', traditionally this means highest priority)
+  // Let's implement unshift as requested.
+  session.requests.unshift(newRequest);
   updateVerifiedSongbook(session, newRequest);
 
   // Update the account's personal history on the DJ/Host side
@@ -694,6 +823,28 @@ export const promoteToStage = async (requestId: string) => {
     session.currentRound.push({ ...req });
   }
   await saveSession(session);
+};
+
+export const markRequestAsDone = async (requestId: string) => {
+  if (isRemoteClient) {
+    // If we need remote support later, add action here
+    return;
+  }
+  const session = await getSession();
+  const req = session.requests.find(r => r.id === requestId);
+  if (req) {
+    req.status = RequestStatus.DONE;
+    req.completedAt = Date.now();
+    // Also update in currentRound if present
+    if (session.currentRound) {
+      const roundReq = session.currentRound.find(r => r.id === requestId);
+      if (roundReq) {
+        roundReq.status = RequestStatus.DONE;
+        roundReq.completedAt = Date.now();
+      }
+    }
+    await saveSession(session);
+  }
 };
 
 export const deleteRequest = async (requestId: string) => {
@@ -836,13 +987,25 @@ export const completeStageSong = async (requestId: string) => {
 export const finishRound = async () => {
   const session = await getSession();
   if (!session.currentRound) return;
-  const roundIds = session.currentRound.map(r => r.id);
-  const finishedSongs = session.currentRound.map(r => ({
+
+  // Sort by completedAt to preserve order of completion
+  const sortedRound = [...session.currentRound].sort((a, b) => {
+    if (a.completedAt && b.completedAt) return a.completedAt - b.completedAt;
+    if (a.completedAt) return -1; // Completed items come first? Or last? User said "order they were set to done". So likely completed ones first, sorted by time.
+    if (b.completedAt) return 1;
+    return 0;
+  });
+
+  const now = Date.now();
+  const finishedSongs = sortedRound.map(r => ({
     ...r,
-    playedAt: Date.now(),
+    playedAt: now,
     isInRound: false,
-    status: RequestStatus.DONE
+    status: RequestStatus.DONE,
+    completedAt: r.completedAt || now
   }));
+
+  const roundIds = session.currentRound.map(r => r.id);
   session.history = [...finishedSongs, ...session.history].slice(0, 100);
   session.requests = session.requests.filter(r => !roundIds.includes(r.id));
 

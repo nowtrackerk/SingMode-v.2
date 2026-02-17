@@ -1,10 +1,10 @@
 
 
 import React, { useState } from 'react';
-import { RequestType } from '../types';
+import { RequestType, Participant } from '../types';
 
 interface SongRequestFormProps {
-  onSubmit: (data: { singerName?: string, songName: string, artist: string, youtubeUrl?: string, type: RequestType }) => void;
+  onSubmit: (data: { singerName?: string, songName: string, artist: string, youtubeUrl?: string, type: RequestType, message?: string, duetPartnerId?: string, duetPartnerName?: string }) => void;
   onCancel: () => void;
   title?: string;
   showSingerName?: boolean;
@@ -14,6 +14,8 @@ interface SongRequestFormProps {
   initialYoutubeUrl?: string;
   initialType?: RequestType;
   submitLabel?: string;
+  participants?: Participant[];
+  currentUserId?: string;
 }
 
 const SongRequestForm: React.FC<SongRequestFormProps> = ({
@@ -26,7 +28,9 @@ const SongRequestForm: React.FC<SongRequestFormProps> = ({
   initialArtist = '',
   initialYoutubeUrl = '',
   initialType = RequestType.SINGING,
-  submitLabel = "Process Request"
+  submitLabel = "Process Request",
+  participants = [],
+  currentUserId = ''
 }) => {
   const [singerName, setSingerName] = useState(initialSingerName);
   const displayTitle = singerName ? `${title}: ${singerName}` : title;
@@ -34,12 +38,25 @@ const SongRequestForm: React.FC<SongRequestFormProps> = ({
   const [artist, setArtist] = useState(initialArtist);
   const [youtubeUrl, setYoutubeUrl] = useState(initialYoutubeUrl);
   const [type, setType] = useState<RequestType>(initialType);
+  const [message, setMessage] = useState('');
+  const [duetPartnerId, setDuetPartnerId] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if ((!songName || !artist) && !youtubeUrl) return;
     if (showSingerName && !singerName) return;
-    onSubmit({ singerName, songName, artist, youtubeUrl, type });
+
+    const duetPartner = participants.find(p => p.id === duetPartnerId);
+    onSubmit({
+      singerName,
+      songName,
+      artist,
+      youtubeUrl,
+      type,
+      message,
+      duetPartnerId: duetPartnerId || undefined,
+      duetPartnerName: duetPartner?.name
+    });
   };
 
   return (
@@ -99,6 +116,36 @@ const SongRequestForm: React.FC<SongRequestFormProps> = ({
             className="w-full bg-[#101015] border-2 border-white/10 rounded-2xl px-6 py-4 text-white font-bold focus:border-[var(--neon-cyan)] outline-none transition-all text-xs font-mono shadow-inner tracking-wider"
           />
         </div>
+
+        <div>
+          <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-2 ml-4 font-righteous">Message to DJ (Optional)</label>
+          <textarea
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder="Key change? Dedication?"
+            rows={2}
+            className="w-full bg-[#101015] border-2 border-white/10 rounded-2xl px-6 py-4 text-white font-bold focus:border-[var(--neon-purple)] outline-none transition-all uppercase shadow-inner text-sm font-righteous tracking-widest resize-none"
+          />
+        </div>
+
+        {type === RequestType.SINGING && participants.length > 1 && (
+          <div>
+            <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-2 ml-4 font-righteous">Duet Partner (Optional)</label>
+            <select
+              value={duetPartnerId}
+              onChange={(e) => setDuetPartnerId(e.target.value)}
+              className="w-full bg-[#101015] border-2 border-white/10 rounded-2xl px-6 py-4 text-white font-bold focus:border-[var(--neon-green)] outline-none transition-all uppercase shadow-inner text-sm font-righteous tracking-widest appearance-none"
+            >
+              <option value="">-- NO PARTNER --</option>
+              {participants
+                .filter(p => p.id !== currentUserId)
+                .map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))
+              }
+            </select>
+          </div>
+        )}
 
         <div>
           <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-2 ml-4 font-righteous">Performance Mode</label>

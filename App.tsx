@@ -8,6 +8,7 @@ import { SingModeLogo } from './components/common/SingModeLogo';
 import { SyncBadge } from './components/common/SyncBadge';
 
 import FeaturesView from './components/FeaturesView';
+import AdminPortal from './components/AdminPortal';
 import { getNetworkUrl, getStoredNetworkIp, setNetworkIp } from './services/networkUtils';
 
 const App: React.FC = () => {
@@ -48,7 +49,12 @@ const App: React.FC = () => {
       }
 
       // Pre-load session to avoid flickering
-      await getSession();
+      const s = await getSession();
+      if (s.customTheme) {
+        document.documentElement.style.setProperty('--neon-pink', s.customTheme.primaryNeon);
+        document.documentElement.style.setProperty('--neon-cyan', s.customTheme.secondaryNeon);
+        document.documentElement.style.setProperty('--neon-yellow', s.customTheme.accentNeon);
+      }
       await cleanupExpiredGuestAccounts();
       setLoading(false);
     };
@@ -98,7 +104,11 @@ const App: React.FC = () => {
   );
 
   if (role === 'FEATURES') {
-    return <FeaturesView onBack={() => setRole('SELECT')} />;
+    return <FeaturesView onBack={() => setRole('SELECT')} onAdminLogin={() => setRole('ADMIN')} />;
+  }
+
+  if (role === 'ADMIN') {
+    return <AdminPortal onBack={() => setRole('SELECT')} />;
   }
 
   if (role === 'SELECT') {
@@ -136,6 +146,16 @@ const App: React.FC = () => {
               <p className="text-rose-500/50 text-xs mt-8 uppercase font-bold tracking-widest font-righteous">SINGLE_DJ_PROTOCOL_ACTIVE</p>
             </div>
           )}
+
+          <div className="flex justify-end mb-4">
+            <button
+              onClick={() => setRole('ADMIN')}
+              className="px-6 py-2 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-[var(--neon-purple)] rounded-xl text-[10px] font-bold text-slate-400 hover:text-[var(--neon-purple)] uppercase tracking-widest transition-all font-righteous flex items-center gap-2 group"
+            >
+              <span className="w-2 h-2 bg-[var(--neon-purple)] rounded-full group-hover:animate-pulse"></span>
+              ACCESS_ADMIN_PORTAL
+            </button>
+          </div>
 
           <div className={`grid gap-8 ${isQRCodeUser ? 'grid-cols-1 max-w-2xl mx-auto' : 'md:grid-cols-2'}`}>
             {!isQRCodeUser && (
@@ -263,7 +283,7 @@ const App: React.FC = () => {
 
       <main className="pb-20">
         {role === 'DJ' ? (
-          <DJView />
+          <DJView onAdminAccess={() => setRole('ADMIN')} />
         ) : (
           <ParticipantView />
         )}

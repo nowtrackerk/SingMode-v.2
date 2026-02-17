@@ -3,7 +3,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Participant, KaraokeSession, ParticipantStatus, RequestType, RequestStatus, SongRequest, UserProfile, FavoriteSong } from '../types';
 // Fixed: Removed non-existent 'isFavorite' from imports.
-import { getSession, joinSession, updateParticipantStatus, addRequest, deleteRequest, updateRequest, getUserProfile, toggleFavorite, saveUserProfile, registerUser, loginUser, logoutUser, updateParticipantMic } from '../services/sessionManager';
+import {
+  getSession, joinSession, updateParticipantStatus, addRequest, deleteRequest,
+  updateRequest, getUserProfile, toggleFavorite, saveUserProfile, registerUser,
+  loginUser, logoutUser, updateParticipantMic, reorderMyRequests, updateVocalRange
+} from '../services/sessionManager';
 import SongRequestForm from './SongRequestForm';
 import { syncService } from '../services/syncService';
 import { getNetworkUrl } from '../services/networkUtils';
@@ -43,6 +47,8 @@ const ParticipantView: React.FC = () => {
 
   const [showQrModal, setShowQrModal] = useState(false);
   const [librarySearchQuery, setLibrarySearchQuery] = useState('');
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanProgress, setScanProgress] = useState(0);
 
   const roomId = syncService.getRoomId();
   const roomJoinUrl = getNetworkUrl() + (roomId ? `?room=${roomId}` : '');
@@ -57,6 +63,10 @@ const ParticipantView: React.FC = () => {
         const found = sess.participants.find(p => p.id === profile.id);
         if (found) {
           setParticipant(found);
+          // If in a remote session (roomId exists), force join to announce presence to DJ
+          if (roomId) {
+            joinSession(profile.id).catch(console.error);
+          }
         } else if (roomId) {
           // Automatic Re-entry for returning users
           console.log(`[Participant] Auto-joining session ${roomId} for profile ${profile.id}`);
@@ -182,13 +192,21 @@ const ParticipantView: React.FC = () => {
     await refresh();
   };
 
-  const handleRequest = async (data: any) => {
+  const handleRequest = async (data: { songName: string, artist: string, youtubeUrl?: string, type: RequestType, message?: string }) => {
     if (!participant) return;
     if (editingRequest) {
-      await updateRequest(editingRequest.id, { songName: data.songName, artist: data.artist, youtubeUrl: data.youtubeUrl, type: data.type });
+      await updateRequest(editingRequest.id, { songName: data.songName, artist: data.artist, youtubeUrl: data.youtubeUrl, type: data.type, message: data.message });
       setEditingRequest(null);
     } else {
-      await addRequest({ participantId: participant.id, participantName: participant.name, songName: data.songName, artist: data.artist, youtubeUrl: data.youtubeUrl, type: data.type });
+      await addRequest({
+        participantId: participant.id,
+        participantName: participant.name,
+        songName: data.songName,
+        artist: data.artist,
+        youtubeUrl: data.youtubeUrl,
+        type: data.type,
+        message: data.message
+      });
       setShowRequestForm(false);
     }
     setPrefillData(null);
@@ -214,22 +232,22 @@ const ParticipantView: React.FC = () => {
         <h1 className="text-6xl md:text-8xl font-bold font-bungee text-white mb-6 uppercase tracking-tight neon-text-glow-purple leading-none">
           SINGMODE
         </h1>
-        <p className="text-[var(--neon-cyan)] font-righteous mb-16 uppercase tracking-[0.6em] text-xs font-black neon-glow-cyan">AUTHORIZED_ACCESS_REQUIRED</p>
+        <p className="text-[var(--neon-cyan)] font-righteous mb-16 uppercase tracking-[0.6em] text-lg font-black neon-glow-cyan">AUTHORIZED_ACCESS_REQUIRED</p>
 
         <form onSubmit={handleAuth} className="w-full space-y-8 bg-[#050510] p-10 md:p-14 rounded-[4rem] border-4 border-white/5 shadow-[0_0_100px_rgba(0,0,0,0.8)] relative overflow-hidden">
           <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-[var(--neon-pink)] via-[var(--neon-purple)] to-[var(--neon-cyan)]"></div>
 
-          {authError && <div className="bg-rose-500/10 border border-rose-500/30 text-rose-500 text-[10px] py-4 px-6 rounded-2xl font-black uppercase tracking-widest animate-pulse font-righteous">{authError}</div>}
+          {authError && <div className="bg-rose-500/10 border border-rose-500/30 text-rose-500 text-base py-4 px-6 rounded-2xl font-black uppercase tracking-widest animate-pulse font-righteous">{authError}</div>}
 
           <div className="space-y-4">
-            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] mb-3 text-left font-righteous ml-4">USER_IDENTITY</label>
+            <label className="block text-base font-black text-slate-500 uppercase tracking-[0.3em] mb-3 text-left font-righteous ml-4">USER_IDENTITY</label>
             <input
               type="text"
               required
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="ENTER_HANDLE"
-              className="w-full bg-[#101015] border-2 border-white/10 rounded-2xl px-8 py-5 text-white font-bold focus:border-[var(--neon-cyan)] outline-none transition-all shadow-inner text-lg uppercase tracking-wider placeholder:text-slate-600 font-righteous"
+              className="w-full bg-[#101015] border-2 border-white/10 rounded-2xl px-8 py-5 text-white font-bold focus:border-[var(--neon-cyan)] outline-none transition-all shadow-inner text-2xl uppercase tracking-wider placeholder:text-slate-600 font-righteous"
             />
           </div>
 
@@ -239,26 +257,26 @@ const ParticipantView: React.FC = () => {
 
           <div className="flex items-center gap-6 py-2 opacity-30">
             <div className="h-px flex-1 bg-white/30"></div>
-            <span className="text-[9px] font-black uppercase tracking-widest font-righteous text-white">OR_USE_KEY</span>
+            <span className="text-sm font-black uppercase tracking-widest font-righteous text-white">OR_USE_KEY</span>
             <div className="h-px flex-1 bg-white/30"></div>
           </div>
 
           <div className="space-y-4">
-            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] mb-3 text-left font-righteous ml-4">PASS_ENCRYPTION</label>
+            <label className="block text-base font-black text-slate-500 uppercase tracking-[0.3em] mb-3 text-left font-righteous ml-4">PASS_ENCRYPTION</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
-              className="w-full bg-[#101015] border-2 border-white/10 rounded-2xl px-8 py-5 text-white font-bold focus:border-[var(--neon-pink)] outline-none transition-all shadow-inner text-xl tracking-wider placeholder:text-slate-600 font-righteous"
+              className="w-full bg-[#101015] border-2 border-white/10 rounded-2xl px-8 py-5 text-white font-bold focus:border-[var(--neon-pink)] outline-none transition-all shadow-inner text-3xl tracking-wider placeholder:text-slate-600 font-righteous"
             />
           </div>
 
-          <button type="submit" className="w-full py-6 mt-6 bg-[var(--neon-pink)] hover:bg-white hover:text-black text-white rounded-2xl font-black text-xl shadow-[0_0_40px_rgba(255,0,127,0.3)] transition-all uppercase tracking-[0.2em] font-bungee hover:scale-[1.02] active:scale-95">
+          <button type="submit" className="w-full py-6 mt-6 bg-[var(--neon-pink)] hover:bg-white hover:text-black text-white rounded-2xl font-black text-3xl shadow-[0_0_40px_rgba(255,0,127,0.3)] transition-all uppercase tracking-[0.2em] font-bungee hover:scale-[1.02] active:scale-95">
             {isLoginMode ? 'AUTHORIZE' : 'INITIALIZE'}
           </button>
 
-          <button type="button" onClick={() => { setIsLoginMode(!isLoginMode); setAuthError(''); }} className="text-slate-600 hover:text-[var(--neon-cyan)] text-[9px] font-black uppercase tracking-[0.3em] pt-6 block mx-auto transition-colors font-righteous border-b-2 border-transparent hover:border-[var(--neon-cyan)] pb-1">
+          <button type="button" onClick={() => { setIsLoginMode(!isLoginMode); setAuthError(''); }} className="text-slate-600 hover:text-[var(--neon-cyan)] text-sm font-black uppercase tracking-[0.3em] pt-6 block mx-auto transition-colors font-righteous border-b-2 border-transparent hover:border-[var(--neon-cyan)] pb-1">
             {isLoginMode ? "ROOT_ACCESS_NEW?" : "BACK_TO_LOGIN"}
           </button>
         </form>
@@ -279,8 +297,17 @@ const ParticipantView: React.FC = () => {
 
         <div className="relative p-8 flex flex-col items-center text-center">
           <div className="absolute top-6 right-6">
-            <button onClick={async () => { await logoutUser(); await refresh(); }} className="text-slate-700 hover:text-white transition-colors p-2 hover:bg-white/5 rounded-full">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+            <button
+              onClick={async () => {
+                if (confirm('Are you sure you want to sign out?')) {
+                  await logoutUser();
+                  await refresh();
+                }
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white rounded-xl transition-all font-black uppercase text-[10px] tracking-widest font-righteous border border-rose-500/20 hover:border-transparent"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+              SIGN OUT
             </button>
           </div>
 
@@ -294,7 +321,49 @@ const ParticipantView: React.FC = () => {
 
           <h2 className="text-4xl font-bold text-white tracking-tight uppercase leading-none font-bungee mb-2">{participant.name}</h2>
           <div className="flex items-center gap-3">
-            <span className="text-[9px] text-[var(--neon-cyan)] font-black uppercase tracking-[0.3em] font-righteous bg-[var(--neon-cyan)]/10 px-3 py-1 rounded-lg border border-[var(--neon-cyan)]/20">AUTHORIZED_NODE</span>
+            <span className="text-sm text-[var(--neon-cyan)] font-black uppercase tracking-[0.3em] font-righteous bg-[var(--neon-cyan)]/10 px-3 py-1 rounded-lg border border-[var(--neon-cyan)]/20">AUTHORIZED_NODE</span>
+          </div>
+
+          <div className="flex flex-col items-center gap-4 w-full max-w-xs mx-auto mt-8">
+            <div className="bg-black/40 border border-white/5 rounded-2xl p-4 w-full group hover:border-[var(--neon-cyan)] transition-all">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-xs font-black text-slate-600 uppercase tracking-widest font-righteous">VOCAL_SIGNATURE</span>
+                <span className="text-base font-bold text-[var(--neon-cyan)] uppercase font-righteous tracking-wider">{userProfile?.vocalRange || 'UNKNOWN'}</span>
+              </div>
+              {isScanning ? (
+                <div className="space-y-2 py-1">
+                  <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                    <div className="h-full bg-[var(--neon-cyan)] animate-pulse shadow-[0_0_10px_var(--neon-cyan)]" style={{ width: `${scanProgress}%` }}></div>
+                  </div>
+                  <div className="text-xs text-[var(--neon-cyan)] font-black animate-pulse font-righteous text-center">ANALYZING_PITCH_WAVETABLE...</div>
+                </div>
+              ) : (
+                <button
+                  onClick={async () => {
+                    setIsScanning(true);
+                    let progress = 0;
+                    const interval = setInterval(() => {
+                      progress += 5;
+                      setScanProgress(progress);
+                      if (progress >= 100) {
+                        clearInterval(interval);
+                        setTimeout(async () => {
+                          const ranges: ('Soprano' | 'Alto' | 'Tenor' | 'Baritone' | 'Bass')[] = ['Soprano', 'Alto', 'Tenor', 'Baritone', 'Bass'];
+                          const randomRange = ranges[Math.floor(Math.random() * ranges.length)];
+                          if (userProfile) await updateVocalRange(userProfile.id, randomRange);
+                          setIsScanning(false);
+                          setScanProgress(0);
+                          await refresh();
+                        }, 500);
+                      }
+                    }, 100);
+                  }}
+                  className="w-full text-center py-2 text-xs font-black uppercase tracking-[0.2em] text-[var(--neon-cyan)] hover:text-white transition-colors font-righteous"
+                >
+                  [ TAP_TO_CALIBRATE_VOICE ]
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </header>
@@ -303,23 +372,51 @@ const ParticipantView: React.FC = () => {
       {session.currentRound && session.currentRound.length > 0 && (
         <section className="animate-in fade-in slide-in-from-top-4">
           <div className="flex items-center gap-3 mb-4 px-4">
-            <div className="w-2 h-2 bg-[var(--neon-yellow)] rounded-full animate-blink"></div>
-            <h3 className="text-[var(--neon-yellow)] font-black uppercase tracking-[0.3em] text-[10px] font-righteous">CURRENT_WAVEFORM</h3>
+            <div className="w-2 h-2 bg-[var(--neon-green)] rounded-full animate-blink"></div>
+            <h3 className="text-[var(--neon-green)] font-black uppercase tracking-[0.3em] text-base font-righteous">CURRENT_WAVEFORM</h3>
           </div>
-          <div className="space-y-4">
+          <div className="flex flex-col gap-3">
             {session.currentRound.map((song, i) => (
-              <div key={song.id} className={`relative overflow-hidden rounded-[2.5rem] transition-all duration-500 ${i === 0 ? 'border-2 border-[var(--neon-yellow)] shadow-[0_0_30px_rgba(255,255,0,0.1)]' : 'opacity-60 grayscale-[0.5] hover:opacity-100 hover:grayscale-0'}`}>
-                <div className={`relative bg-[#101015] p-6 rounded-[2.4rem] flex justify-between items-center z-10 ${i === 0 ? 'bg-[#151520]' : ''}`}>
-                  <div className="min-w-0 pr-4">
-                    <div className="flex items-center gap-3 mb-2">
-                      {i === 0 && <span className="text-[9px] bg-[var(--neon-pink)] text-white px-2 py-0.5 rounded font-black uppercase tracking-widest font-righteous rotate-[-2deg] shadow-lg">LIVE</span>}
-                      <div className={`font-black uppercase truncate font-bungee ${i === 0 ? 'text-xl text-white' : 'text-lg text-slate-500'}`}>
-                        {song.songName}
-                      </div>
-                    </div>
-                    <div className="text-[11px] text-[var(--neon-cyan)] font-bold uppercase tracking-[0.2em] truncate font-righteous">{song.artist}</div>
-                    <div className="mt-2 text-[10px] font-medium text-slate-400 uppercase tracking-widest font-mono">@{song.participantName}</div>
+              <div
+                key={song.id}
+                className={`p-3 pl-6 pr-4 rounded-xl border-l-8 transition-all duration-300 flex items-center justify-between gap-4 w-full shadow-lg relative overflow-hidden group ${i === 0
+                  ? 'bg-[#001005] border-l-[var(--neon-green)] border-y border-r border-[#1a3320] z-10 scale-[1.01]'
+                  : 'bg-[#0a0a10] border-l-slate-700 border-y border-r border-white/10 opacity-70 hover:opacity-100'
+                  }`}
+              >
+                {/* Strip Background Grid Lines */}
+                <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_49%,rgba(255,255,255,0.03)_50%,transparent_51%)] bg-[length:50px_100%] pointer-events-none"></div>
+
+                {/* Left Side: Info Strip */}
+                <div className="flex items-center gap-6 min-w-0 flex-1 z-10">
+                  {/* ID Box */}
+                  <div className="w-14 h-full flex flex-col justify-center items-center border-r border-white/10 pr-4 shrink-0">
+                    <span className="text-[9px] text-slate-500 font-mono uppercase tracking-widest hidden sm:block">SEQ_ID</span>
+                    <span className={`text-xl font-bold font-mono tracking-tighter ${i === 0 ? 'text-[var(--neon-green)]' : 'text-slate-400'}`}>
+                      {String(song.requestNumber).padStart(3, '0')}
+                    </span>
                   </div>
+
+                  {/* Main Info */}
+                  <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-6 min-w-0 flex-1">
+                    <h3 className={`text-2xl sm:text-3xl font-black uppercase truncate font-righteous tracking-tight ${i === 0 ? 'text-white' : 'text-slate-300'}`}>
+                      {song.songName}
+                    </h3>
+                    <div className="flex items-center gap-2 sm:gap-3 opacity-80 shrink-0">
+                      <span className="text-sm sm:text-xl font-bold font-righteous text-[var(--neon-cyan)] uppercase tracking-wider truncate max-w-[150px]">{song.artist}</span>
+                      <span className="text-slate-600 font-mono text-lg hidden sm:inline">/</span>
+                      <span className="text-sm sm:text-xl font-bold font-righteous text-[var(--neon-pink)] uppercase tracking-wider truncate max-w-[150px]">@{song.participantName}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Side: Status/Link */}
+                <div className="flex items-center gap-3 z-10 pl-4 border-l border-white/10 bg-gradient-to-l from-black/80 to-transparent">
+                  {i === 0 && (
+                    <div className="px-3 py-1 bg-[var(--neon-green)] text-black text-[10px] font-black uppercase tracking-[0.2em] rounded animate-pulse shadow-[0_0_10px_var(--neon-green)] shrink-0">
+                      LIVE
+                    </div>
+                  )}
                   {i === 0 && <VideoLink url={song.youtubeUrl} />}
                 </div>
               </div>
@@ -334,12 +431,12 @@ const ParticipantView: React.FC = () => {
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`py-4 rounded-xl text-[8px] font-black uppercase tracking-widest transition-all font-righteous flex flex-col items-center justify-center gap-1.5 ${activeTab === tab
+            className={`py-4 rounded-xl text-xs font-black uppercase tracking-widest transition-all font-righteous flex flex-col items-center justify-center gap-1.5 ${activeTab === tab
               ? 'bg-[#151520] text-white shadow-[0_0_20px_rgba(255,255,255,0.05)] border border-white/10'
               : 'text-slate-600 hover:text-white hover:bg-white/5'
               }`}
           >
-            <span className={`text-xl mb-0.5 ${activeTab === tab ? 'text-[var(--neon-pink)]' : 'grayscale opacity-50'}`}>
+            <span className={`text-3xl mb-0.5 ${activeTab === tab ? 'text-[var(--neon-pink)]' : 'grayscale opacity-50'}`}>
               {tab === 'ROTATION' ? '💿' : tab === 'REQUESTS' ? '📼' : tab === 'FAVORITES' ? '⭐' : '📜'}
             </span>
             {tab === 'ROTATION' ? 'LIVE' :
@@ -351,7 +448,7 @@ const ParticipantView: React.FC = () => {
 
       <button
         onClick={() => { setPrefillData(null); setShowRequestForm(true); }}
-        className="w-full py-6 bg-gradient-to-r from-[var(--neon-blue)] to-[var(--neon-purple)] text-white rounded-[2rem] font-bold text-lg shadow-[0_0_40px_rgba(93,0,255,0.3)] uppercase tracking-wider active:scale-95 transition-all font-bungee hover:brightness-110 border-2 border-white/10"
+        className="w-full py-6 bg-gradient-to-r from-[var(--neon-blue)] to-[var(--neon-purple)] text-white rounded-[2rem] font-bold text-2xl shadow-[0_0_40px_rgba(93,0,255,0.3)] uppercase tracking-wider active:scale-95 transition-all font-bungee hover:brightness-110 border-2 border-white/10"
       >
         + REQUEST TRACK
       </button>
@@ -359,7 +456,7 @@ const ParticipantView: React.FC = () => {
       <div className="pt-2">
         <button
           onClick={toggleStatus}
-          className={`w-full py-8 rounded-[2.5rem] font-bold text-2xl uppercase tracking-wider transition-all border-2 flex flex-col items-center justify-center gap-2 group relative overflow-hidden font-bungee ${participant.status === ParticipantStatus.READY
+          className={`w-full py-8 rounded-[2.5rem] font-bold text-4xl uppercase tracking-wider transition-all border-2 flex flex-col items-center justify-center gap-2 group relative overflow-hidden font-bungee ${participant.status === ParticipantStatus.READY
             ? 'bg-[#051005] border-[var(--neon-green)] shadow-[0_0_30px_rgba(0,255,157,0.1)]'
             : 'bg-[#101015] border-white/5 text-slate-700 hover:border-white/10'
             }`}
@@ -367,7 +464,7 @@ const ParticipantView: React.FC = () => {
           <span className={`relative z-10 ${participant.status === ParticipantStatus.READY ? 'text-[var(--neon-green)]' : 'text-slate-600'}`}>
             {participant.status === ParticipantStatus.READY ? 'STAGE_READY' : 'GO_OFFLINE'}
           </span>
-          <span className={`relative z-10 text-[9px] font-righteous tracking-[0.4em] uppercase ${participant.status === ParticipantStatus.READY ? 'text-[var(--neon-green)] opacity-80' : 'text-slate-800'}`}>
+          <span className={`relative z-10 text-sm font-righteous tracking-[0.4em] uppercase ${participant.status === ParticipantStatus.READY ? 'text-[var(--neon-green)] opacity-80' : 'text-slate-800'}`}>
             {participant.status === ParticipantStatus.READY ? 'MICROPHONE_LINK_ESTABLISHED' : 'STANDBY_MODE'}
           </span>
         </button>
@@ -386,6 +483,8 @@ const ParticipantView: React.FC = () => {
               initialType={editingRequest?.type || prefillData?.type || RequestType.SINGING}
               onSubmit={handleRequest}
               onCancel={closeModals}
+              participants={session.participants}
+              currentUserId={participant.id}
             />
           </div>
         </div>
@@ -394,25 +493,61 @@ const ParticipantView: React.FC = () => {
       <main className="min-h-[300px] pb-32">
         {activeTab === 'ROTATION' && (
           <section className="animate-in slide-in-from-bottom-8 duration-500 space-y-6">
-            <h3 className="text-[var(--neon-pink)] font-black uppercase tracking-[0.3em] text-[9px] px-4 font-righteous opacity-80">UPCOMING_WAVEFORM</h3>
+            <h3 className="text-[var(--neon-green)] font-black uppercase tracking-[0.3em] text-sm px-4 font-righteous opacity-80">UPCOMING_WAVEFORM</h3>
             <div className="space-y-4">
-              {session.requests.filter(r => r.status === RequestStatus.APPROVED && !r.isInRound).length > 0 ? (
-                session.requests.filter(r => r.status === RequestStatus.APPROVED && !r.isInRound).map(req => (
+              {(() => {
+                // Custom Interleaved Sorting Logic (Matching DJ View)
+                const pendingRequests = session.requests.filter(r => r.status === RequestStatus.PENDING && !r.isInRound);
+                const approvedSingingRaw = session.requests.filter(r => r.status === RequestStatus.APPROVED && r.type === RequestType.SINGING && !r.isInRound);
+
+                const participantsWithSongs = session.participants.filter(p => approvedSingingRaw.some(r => r.participantId === p.id))
+                  .sort((a, b) => (b.joinedAt || 0) - (a.joinedAt || 0)); // Rank by Newest First
+
+                const requestsByParticipant: { [key: string]: SongRequest[] } = {};
+                approvedSingingRaw.forEach(r => {
+                  if (!requestsByParticipant[r.participantId]) requestsByParticipant[r.participantId] = [];
+                  requestsByParticipant[r.participantId].push(r);
+                });
+
+                Object.keys(requestsByParticipant).forEach(pid => {
+                  requestsByParticipant[pid].sort((a, b) => a.createdAt - b.createdAt);
+                });
+
+                const approvedSinging: SongRequest[] = [];
+                let round = 0;
+                let hasMore = true;
+                while (hasMore) {
+                  hasMore = false;
+                  participantsWithSongs.forEach(p => {
+                    if (requestsByParticipant[p.id] && requestsByParticipant[p.id][round]) {
+                      approvedSinging.push(requestsByParticipant[p.id][round]);
+                      hasMore = true;
+                    }
+                  });
+                  round++;
+                }
+
+                if (approvedSinging.length === 0) return (
+                  <div className="text-center py-16 opacity-30 border-2 border-dashed border-white/5 rounded-[2.5rem] bg-black/20">
+                    <p className="text-sm font-black uppercase tracking-[0.4em] font-righteous text-slate-600">SILENCE_DETECTED</p>
+                  </div>
+                );
+
+                return approvedSinging.map((req, i) => (
                   <div key={req.id} className="bg-[#101015] border-2 border-white/5 p-6 rounded-[2rem] flex justify-between items-center group hover:border-[var(--neon-blue)] transition-all">
                     <div className="min-w-0 pr-4">
-                      <div className="text-white font-bold uppercase truncate text-lg font-bungee tracking-tight mb-1 group-hover:text-[var(--neon-blue)] transition-colors">{req.songName}</div>
-                      <div className="text-[10px] text-[var(--neon-cyan)] uppercase tracking-[0.2em] flex items-center gap-2 font-righteous">
+                      <div className="text-white font-bold uppercase truncate text-2xl font-bungee tracking-tight mb-1 group-hover:text-[var(--neon-blue)] transition-colors">{req.songName}</div>
+                      <div className="text-base text-[var(--neon-cyan)] uppercase tracking-[0.2em] flex items-center gap-2 font-righteous">
                         {req.artist} <span className="text-white/20">|</span> <span className="text-slate-400">{req.participantName}</span>
                       </div>
                     </div>
-                    <div className="shrink-0 w-8 h-8 rounded-full border border-[var(--neon-blue)]/50 bg-[var(--neon-blue)]/10 flex items-center justify-center text-[var(--neon-blue)] text-xs shadow-[0_0_15px_rgba(5,217,232,0.2)]">✓</div>
+                    <div className="shrink-0 w-12 h-12 rounded-full border border-[var(--neon-blue)]/50 bg-[var(--neon-blue)]/10 flex items-center justify-center text-[var(--neon-blue)] text-xl font-black font-bungee shadow-[0_0_15px_rgba(5,217,232,0.2)]">
+                      {i + 1}
+                    </div>
                   </div>
-                ))
-              ) : (
-                <div className="text-center py-16 opacity-30 border-2 border-dashed border-white/5 rounded-[2.5rem] bg-black/20">
-                  <p className="text-[9px] font-black uppercase tracking-[0.4em] font-righteous text-slate-600">SILENCE_DETECTED</p>
-                </div>
-              )}
+                ));
+              })()}
+
             </div>
           </section>
         )}
@@ -425,24 +560,40 @@ const ParticipantView: React.FC = () => {
                   <div className="flex justify-between items-start mb-4">
                     <div className="min-w-0 pr-4">
                       <div className="flex items-center gap-3 mb-2">
-                        <div className="font-bold text-white tracking-tight uppercase truncate font-bungee text-xl group-hover:text-[var(--neon-pink)] transition-colors">
+                        <div className="font-bold text-white tracking-tight uppercase truncate font-bungee text-3xl group-hover:text-[var(--neon-pink)] transition-colors">
                           <span className="text-slate-500 mr-2 text-[11px] font-mono tracking-widest">#{req.requestNumber}</span>{req.songName}
                         </div>
                         <VideoLink url={req.youtubeUrl} />
                       </div>
-                      <div className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] truncate font-righteous">{req.artist}</div>
+                      <div className="text-base text-slate-400 font-bold uppercase tracking-[0.2em] truncate font-righteous">{req.artist}</div>
                     </div>
-                    <div className={`shrink-0 px-3 py-1 rounded-lg border text-[8px] font-black uppercase tracking-widest ${req.status === RequestStatus.APPROVED
-                      ? (req.isInRound ? 'bg-[var(--neon-pink)] border-[var(--neon-pink)] text-black animate-pulse' : 'bg-[var(--neon-cyan)]/10 border-[var(--neon-cyan)] text-[var(--neon-cyan)]')
+                    <div className={`shrink-0 px-3 py-1 rounded-lg border text-xs font-black uppercase tracking-widest ${req.status === RequestStatus.APPROVED
+                      ? (req.isInRound ? 'bg-[var(--neon-green)] border-[var(--neon-green)] text-black animate-pulse shadow-[0_0_15px_var(--neon-green)]' : 'bg-[var(--neon-cyan)]/10 border-[var(--neon-cyan)] text-[var(--neon-cyan)]')
                       : 'border-white/10 text-slate-600'
                       }`}>
                       {req.status === RequestStatus.APPROVED ? (req.isInRound ? 'LIVE' : 'QUEUED') : 'PENDING'}
                     </div>
                   </div>
-                  {req.status === RequestStatus.PENDING && (
+                  {(req.status === RequestStatus.PENDING || req.status === RequestStatus.APPROVED) && (
                     <div className="flex gap-3 pt-4 border-t border-white/5">
-                      <button onClick={() => setEditingRequest(req)} className="flex-1 py-3 bg-white/5 hover:bg-white/10 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all font-righteous text-white">EDIT</button>
-                      <button onClick={async () => { await deleteRequest(req.id); await refresh(); }} className="flex-1 py-3 bg-rose-500/10 hover:bg-rose-500/20 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all font-righteous text-rose-500">CANCEL</button>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={async () => { await reorderMyRequests(participant.id, req.id, 'up'); await refresh(); }}
+                          className="w-10 h-10 bg-white/5 hover:bg-white/10 rounded-xl flex items-center justify-center text-white transition-all text-xl"
+                          title="Move Up"
+                        >
+                          ▲
+                        </button>
+                        <button
+                          onClick={async () => { await reorderMyRequests(participant.id, req.id, 'down'); await refresh(); }}
+                          className="w-10 h-10 bg-white/5 hover:bg-white/10 rounded-xl flex items-center justify-center text-white transition-all text-xl"
+                          title="Move Down"
+                        >
+                          ▼
+                        </button>
+                      </div>
+                      <button onClick={() => setEditingRequest(req)} className="flex-1 py-3 bg-white/5 hover:bg-white/10 rounded-xl text-sm font-black uppercase tracking-widest transition-all font-righteous text-white">EDIT</button>
+                      <button onClick={async () => { await deleteRequest(req.id); await refresh(); }} className="flex-1 py-3 bg-rose-500/10 hover:bg-rose-500/20 rounded-xl text-sm font-black uppercase tracking-widest transition-all font-righteous text-rose-500">CANCEL</button>
                     </div>
                   )}
                 </div>
@@ -450,7 +601,7 @@ const ParticipantView: React.FC = () => {
             ))}
             {myRequests.length === 0 && (
               <div className="text-center py-20 bg-black/20 rounded-[3rem] border-2 border-dashed border-white/5">
-                <p className="text-[10px] font-black uppercase tracking-[0.5em] font-righteous text-slate-700">NO_DATA_STREAM</p>
+                <p className="text-base font-black uppercase tracking-[0.5em] font-righteous text-slate-700">NO_DATA_STREAM</p>
               </div>
             )}
           </section>
@@ -464,9 +615,9 @@ const ParticipantView: React.FC = () => {
                 placeholder="SEARCH ARCHIVE..."
                 value={librarySearchQuery}
                 onChange={(e) => setLibrarySearchQuery(e.target.value)}
-                className="w-full bg-[#101015] border-2 border-white/10 rounded-[2rem] py-5 px-6 pl-14 text-sm font-bold uppercase tracking-wider text-white focus:outline-none focus:border-[var(--neon-pink)] transition-all font-righteous placeholder:text-slate-600 shadow-inner"
+                className="w-full bg-[#101015] border-2 border-white/10 rounded-[2rem] py-5 px-6 pl-14 text-xl font-bold uppercase tracking-wider text-white focus:outline-none focus:border-[var(--neon-pink)] transition-all font-righteous placeholder:text-slate-600 shadow-inner"
               />
-              <span className="absolute left-6 top-1/2 -translate-y-1/2 text-lg text-slate-600 group-focus-within:text-[var(--neon-pink)] transition-colors">🔍</span>
+              <span className="absolute left-6 top-1/2 -translate-y-1/2 text-2xl text-slate-600 group-focus-within:text-[var(--neon-pink)] transition-colors">🔍</span>
             </div>
 
             <div className="grid gap-3">
@@ -478,19 +629,19 @@ const ParticipantView: React.FC = () => {
                     .map(v => ({ ...v, isFavorite: false }))
                 ].filter(song => !librarySearchQuery || song.songName.toLowerCase().includes(librarySearchQuery.toLowerCase()) || song.artist.toLowerCase().includes(librarySearchQuery.toLowerCase()));
 
-                if (combined.length === 0) return <div className="text-center py-20 opacity-30 font-righteous text-[9px] uppercase tracking-widest text-slate-500">NO_MATCHES</div>;
+                if (combined.length === 0) return <div className="text-center py-20 opacity-30 font-righteous text-sm uppercase tracking-widest text-slate-500">NO_MATCHES</div>;
 
                 return combined.map(song => (
                   <div key={song.id} className="bg-[#101015] p-5 rounded-[2rem] flex justify-between items-center group border-2 border-white/5 hover:border-[var(--neon-yellow)] transition-all">
                     <div className="min-w-0 pr-4">
                       <div className="flex items-center gap-2 mb-1">
-                        <div className="text-white font-bold uppercase truncate text-base font-bungee tracking-tight group-hover:text-[var(--neon-yellow)] transition-colors">{song.songName}</div>
-                        {song.isFavorite && <span className="text-xs text-[var(--neon-yellow)] animate-pulse">★</span>}
+                        <div className="text-white font-bold uppercase truncate text-2xl font-bungee tracking-tight group-hover:text-[var(--neon-yellow)] transition-colors">{song.songName}</div>
+                        {song.isFavorite && <span className="text-lg text-[var(--neon-yellow)] animate-pulse">★</span>}
                       </div>
-                      <div className="text-[9px] text-slate-400 font-bold uppercase tracking-[0.2em] font-righteous">{song.artist}</div>
+                      <div className="text-sm text-slate-400 font-bold uppercase tracking-[0.2em] font-righteous">{song.artist}</div>
                     </div>
                     <div className="flex gap-3">
-                      <button onClick={() => { setPrefillData({ ...song }); setShowRequestForm(true); }} className="bg-[var(--neon-pink)] text-black px-4 py-2 rounded-xl font-black text-[8px] uppercase tracking-widest hover:bg-white transition-all font-righteous shadow-[0_0_15px_rgba(255,0,127,0.3)] hover:scale-105 active:scale-95">ADD</button>
+                      <button onClick={() => { setPrefillData({ ...song }); setShowRequestForm(true); }} className="bg-[var(--neon-pink)] text-black px-4 py-2 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-white transition-all font-righteous shadow-[0_0_15px_rgba(255,0,127,0.3)] hover:scale-105 active:scale-95">ADD</button>
                       <button onClick={async () => { await toggleFavorite(song); await refresh(); }} className={`px-2 transition-colors ${song.isFavorite ? 'text-rose-500' : 'text-slate-700 hover:text-[var(--neon-yellow)]'}`}>{song.isFavorite ? '✕' : '★'}</button>
                     </div>
                   </div>
@@ -505,15 +656,15 @@ const ParticipantView: React.FC = () => {
             {userProfile.personalHistory.map((h, i) => (
               <div key={i} className="bg-[#101015] p-6 rounded-[2rem] flex justify-between items-center border-2 border-white/5 hover:border-[var(--neon-purple)] group transition-all">
                 <div className="min-w-0 pr-4">
-                  <div className="text-white font-bold uppercase truncate text-lg font-bungee tracking-tight mb-1 group-hover:text-[var(--neon-purple)] transition-colors">{h.songName}</div>
-                  <div className="text-[10px] text-[var(--neon-cyan)]/70 font-bold uppercase tracking-[0.2em] font-righteous">{h.artist}</div>
+                  <div className="text-white font-bold uppercase truncate text-2xl font-bungee tracking-tight mb-1 group-hover:text-[var(--neon-purple)] transition-colors">{h.songName}</div>
+                  <div className="text-base text-[var(--neon-cyan)]/70 font-bold uppercase tracking-[0.2em] font-righteous">{h.artist}</div>
                 </div>
-                <button onClick={() => { setPrefillData({ ...h, type: RequestType.SINGING }); setShowRequestForm(true); }} className="text-slate-600 hover:text-white border border-white/5 hover:border-white px-4 py-2 rounded-xl font-black text-[8px] uppercase tracking-widest transition-all font-righteous">AGAIN</button>
+                <button onClick={() => { setPrefillData({ ...h, type: RequestType.SINGING }); setShowRequestForm(true); }} className="text-slate-600 hover:text-white border border-white/5 hover:border-white px-4 py-2 rounded-xl font-black text-xs uppercase tracking-widest transition-all font-righteous">AGAIN</button>
               </div>
             ))}
             {userProfile.personalHistory.length === 0 && (
               <div className="text-center py-20 opacity-30 border-2 border-dashed border-white/5 rounded-[2.5rem] bg-black/20">
-                <p className="text-[9px] font-black uppercase tracking-[0.4em] font-righteous text-slate-600">NO_HISTORY_LOGS</p>
+                <p className="text-sm font-black uppercase tracking-[0.4em] font-righteous text-slate-600">NO_HISTORY_LOGS</p>
               </div>
             )}
           </section>
@@ -525,10 +676,10 @@ const ParticipantView: React.FC = () => {
           onClick={() => setShowQrModal(true)}
           className="w-full bg-[#101015] border-2 border-white/10 p-4 rounded-[2rem] flex items-center justify-between px-8 shadow-2xl hover:border-[var(--neon-pink)] transition-all group"
         >
-          <span className="text-[9px] text-[var(--neon-pink)] font-black uppercase tracking-[0.3em] font-righteous">SYSTEM_LINK</span>
+          <span className="text-sm text-[var(--neon-pink)] font-black uppercase tracking-[0.3em] font-righteous">SYSTEM_LINK</span>
           <div className="flex items-center gap-3">
             <span className="text-white font-black uppercase tracking-tight font-bungee">INVITE FRIEND</span>
-            <span className="text-lg group-hover:scale-125 transition-transform">📲</span>
+            <span className="text-2xl group-hover:scale-125 transition-transform">📲</span>
           </div>
         </button>
       </footer>
@@ -537,12 +688,12 @@ const ParticipantView: React.FC = () => {
         <div className="fixed inset-0 bg-black/95 flex items-center justify-center p-8 z-[200] animate-in zoom-in-95 duration-300">
           <div className="w-full max-w-sm text-center relative bg-[#050510] border-4 border-white/10 rounded-[3rem] p-10 overflow-hidden">
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[var(--neon-pink)] via-[var(--neon-purple)] to-[var(--neon-cyan)] animate-gradient-x"></div>
-            <button onClick={() => setShowQrModal(false)} className="absolute top-6 right-6 text-slate-700 hover:text-white text-xl transition-colors">✕</button>
+            <button onClick={() => setShowQrModal(false)} className="absolute top-6 right-6 text-slate-700 hover:text-white text-3xl transition-colors">✕</button>
             <div className="bg-white p-4 rounded-[2rem] inline-block mb-8 shadow-[0_0_40px_rgba(255,255,255,0.1)]">
               <img src={`https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(roomJoinUrl)}&bgcolor=ffffff`} alt="Room QR" className="w-48 h-48" />
             </div>
-            <h3 className="text-3xl font-black text-white uppercase tracking-tight mb-2 font-bungee neon-glow-white">SYNC_NODE</h3>
-            <p className="text-[var(--neon-cyan)] text-[9px] font-black uppercase tracking-[0.4em] font-righteous opacity-80">SCAN TO INITIALIZE CONNECTION</p>
+            <h3 className="text-5xl font-black text-white uppercase tracking-tight mb-2 font-bungee neon-glow-white">SYNC_NODE</h3>
+            <p className="text-[var(--neon-cyan)] text-sm font-black uppercase tracking-[0.4em] font-righteous opacity-80">SCAN TO INITIALIZE CONNECTION</p>
           </div>
         </div>
       )}
