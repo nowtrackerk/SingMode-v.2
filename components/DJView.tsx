@@ -181,6 +181,10 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
   const [profileForm, setProfileForm] = useState({ name: '', password: '' });
   const [profileError, setProfileError] = useState('');
 
+  // Password Change State
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [passwordForm, setPasswordForm] = useState('');
+
   const refresh = useCallback(async () => {
     const currentSession = await getSession();
     setSession(currentSession);
@@ -474,6 +478,29 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
     });
   };
 
+  const startChangePassword = (user: UserProfile) => {
+    setEditingProfile(user);
+    setPasswordForm('');
+    setIsChangingPassword(true);
+    setProfileError('');
+  };
+
+  const handleChangePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProfile) return;
+
+    const result = await updateAccount(editingProfile.id, { password: passwordForm });
+    if (result.success) {
+      setEditingProfile(null);
+      setIsChangingPassword(false);
+      setPasswordForm('');
+      setProfileError('');
+      await refresh();
+    } else {
+      setProfileError(result.error || "Update failed.");
+    }
+  };
+
   const closeModals = () => {
     setIsAddingRequest(false);
 
@@ -486,6 +513,7 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
     setShowLibrary(false);
     setShowResetConfirm(false);
     setIsCreatingProfile(false);
+    setIsChangingPassword(false);
     setEditingProfile(null);
     setManagedProfile(null);
     setShowNetworkConfig(false);
@@ -1685,7 +1713,7 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
                           </div>
 
                           <div className="w-full mt-10 space-y-3">
-                            <button onClick={() => startEditProfile(managedProfile)} className="w-full py-3 bg-black border border-white/10 hover:border-[var(--neon-pink)] text-white rounded-xl text-sm font-black uppercase tracking-widest transition-all font-righteous">MODIFY SECURITY</button>
+                            <button onClick={() => startChangePassword(managedProfile)} className="w-full py-3 bg-black border border-white/10 hover:border-[var(--neon-pink)] text-white rounded-xl text-sm font-black uppercase tracking-widest transition-all font-righteous">MODIFY SECURITY</button>
                             <button onClick={async () => { await joinSession(managedProfile.id); await refresh(); }} className="w-full py-3 bg-[var(--neon-cyan)] text-black rounded-xl text-sm font-black uppercase tracking-widest transition-all shadow-[0_0_15px_rgba(0,229,255,0.3)] font-righteous hover:bg-white">FORCE RE-JOIN</button>
                             <div className="pt-2 border-t border-white/5 mt-2 space-y-2">
                               {session.bannedUsers?.some(b => b.id === managedProfile.id) ? (
@@ -1779,6 +1807,32 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
                       </div>
                     </div>
                   </div>
+                ) : isChangingPassword ? (
+                  <form onSubmit={handleChangePasswordSubmit} className="max-w-xl mx-auto bg-[#101015] border-2 border-white/10 p-10 rounded-[3rem] space-y-6 shadow-[0_0_60px_rgba(255,0,127,0.1)] animate-in fade-in zoom-in-95 duration-500">
+                    <h3 className="text-5xl font-bold text-white uppercase tracking-tight font-bungee neon-glow-pink mb-2 text-center">SECURITY UPDATE</h3>
+                    <p className="text-center text-slate-400 font-righteous uppercase tracking-widest mb-8">
+                      UPDATING KEY FOR: <span className="text-[var(--neon-cyan)]">{editingProfile?.name}</span>
+                    </p>
+
+                    <div className="space-y-6">
+                      <div>
+                        <label className="block text-sm font-bold text-slate-500 uppercase mb-2 ml-4 tracking-widest font-righteous">NEW ENCRYPTION PIN</label>
+                        <input required type="password" value={passwordForm} onChange={e => { setPasswordForm(e.target.value); setProfileError(''); }} className="w-full bg-black border border-white/10 rounded-2xl px-6 py-4 text-white font-bold uppercase font-righteous tracking-widest outline-none focus:border-[var(--neon-pink)] transition-all" placeholder="ENTER NEW PIN" />
+                      </div>
+
+                      {profileError && (
+                        <div className="mb-4 animate-pulse">
+                          <p className="text-[var(--neon-pink)] font-bold uppercase text-sm tracking-widest flex items-center gap-2">
+                            <span className="text-lg">⚠️</span> {profileError}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex gap-4 pt-4">
+                      <button type="button" onClick={() => { setIsChangingPassword(false); setEditingProfile(null); }} className="flex-1 py-4 bg-black border border-white/10 text-white rounded-xl text-sm font-bold uppercase tracking-widest font-righteous hover:bg-white/5">ABORT</button>
+                      <button type="submit" className="flex-[2] py-4 bg-[var(--neon-cyan)] text-black rounded-xl text-sm font-bold uppercase tracking-widest font-righteous shadow-[0_0_20px_rgba(0,229,255,0.3)] hover:bg-white">UPDATE KEY</button>
+                    </div>
+                  </form>
                 ) : isCreatingProfile ? (
                   <form onSubmit={handleProfileFormSubmit} className="max-w-xl mx-auto bg-[#101015] border-2 border-white/10 p-10 rounded-[3rem] space-y-6 shadow-[0_0_60px_rgba(255,0,127,0.1)] animate-in fade-in zoom-in-95 duration-500">
                     <h3 className="text-5xl font-bold text-white uppercase tracking-tight font-bungee neon-glow-pink mb-2 text-center">{editingProfile ? 'Modify Profile' : 'New User Account'}</h3>
