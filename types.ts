@@ -147,3 +147,13 @@ export interface RemoteAction {
   payload: any;
   senderId: string;
 }
+
+export interface ActiveSession {
+  id: string; // Peer ID / Room ID
+  hostName: string;
+  hostUid?: string; // Firebase Auth UID of the host
+  venueName?: string;
+  isActive: boolean;
+  startedAt: number;
+  participantsCount: number;
+}

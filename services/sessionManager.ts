@@ -1,5 +1,8 @@
-import { KaraokeSession, Participant, SongRequest, ParticipantStatus, RequestStatus, UserProfile, FavoriteSong, RequestType, ChatMessage, TickerMessage, RemoteAction, VerifiedSong } from '../types';
+import { KaraokeSession, Participant, SongRequest, ParticipantStatus, RequestStatus, UserProfile, FavoriteSong, RequestType, ChatMessage, TickerMessage, RemoteAction, VerifiedSong, ActiveSession } from '../types';
 import { syncService } from './syncService';
+import { auth, db } from './firebaseConfig';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, signInAnonymously } from "firebase/auth";
+import { collection, doc, setDoc, getDoc, updateDoc, deleteDoc, onSnapshot, query, where, getDocs } from "firebase/firestore";
 
 const STORAGE_KEY = 'kstar_karaoke_session';
 const PROFILE_KEY = 'kstar_active_user';
@@ -141,7 +144,63 @@ async function handleRemoteAction(action: RemoteAction) {
 
 export const initializeSync = async (role: 'DJ' | 'PARTICIPANT', room?: string) => {
   isRemoteClient = role === 'PARTICIPANT' && !!room;
-  await syncService.initialize(role, room);
+  const peerId = await syncService.initialize(role, room);
+
+  // Initialize Firebase Realtime Sync for Users if we are the DJ/Host
+  if (!isRemoteClient && peerId) {
+    // Register Session
+    const user = await getUserProfile();
+    const hostName = user?.name || "SingMode DJ";
+    const hostUid = user?.id;
+
+    await registerSession({
+      id: peerId,
+      hostName,
+      hostUid,
+      isActive: true,
+      startedAt: Date.now()
+    });
+
+    // Cleanup on close
+    window.addEventListener('beforeunload', () => {
+      unregisterSession(peerId);
+    });
+
+    const usersRef = collection(db, "users");
+    onSnapshot(usersRef, async (snapshot) => {
+      const dbUsers: UserProfile[] = [];
+      snapshot.forEach((doc) => {
+        dbUsers.push(doc.data() as UserProfile);
+      });
+
+      // Merge: Keep local users that are NOT in Firestore (e.g. legacy/local-only 'singer-' accounts)
+      const currentLocal = await storage.get(ACCOUNTS_KEY) || [];
+      const localOnly = currentLocal.filter((u: UserProfile) => !dbUsers.some(d => d.id === u.id));
+
+      // Dedup by ID just in case
+      const merged = [...dbUsers, ...localOnly];
+
+      // If we have lost our "Dinger/Singer" seeds and only have a few users, we might want to restore seeds?
+      // Check if we have "Singer" or "Dinger" accounts
+      const hasSeeds = merged.some(u => u.id.startsWith('singer-') || u.name.toLowerCase().includes('dinger'));
+
+      if (!hasSeeds && merged.length < 5) {
+        // Restore Seeds (renamed to Dinger as per user preference implied)
+        const seeds: UserProfile[] = Array.from({ length: 5 }, (_, i) => ({
+          id: `singer-${i + 1}`,
+          name: `DINGER${i + 1}`,
+          password: '123', // Default simple pass for seeds
+          favorites: [],
+          personalHistory: [],
+          createdAt: Date.now()
+        }));
+        merged.push(...seeds);
+      }
+
+      console.log("Synced users from Firestore:", dbUsers.length, "Local preserved:", localOnly.length, "Total:", merged.length);
+      storage.set(ACCOUNTS_KEY, merged);
+    });
+  }
 };
 
 export const getSession = async (): Promise<KaraokeSession> => {
@@ -228,8 +287,24 @@ export const setStageVideoPlaying = async (active: boolean) => {
 };
 
 export const getAllAccounts = async (): Promise<UserProfile[]> => {
-  const accounts = await storage.get(ACCOUNTS_KEY);
-  if (!accounts) {
+  // If we have a local cache from onSnapshot, use it.
+  // Fallback to fetch from Firestore if cache is empty (e.g. first load before sync)
+  let accounts = await storage.get(ACCOUNTS_KEY);
+  if (!accounts || accounts.length === 0) {
+    try {
+      const usersRef = collection(db, "users");
+      const snapshot = await getDocs(usersRef);
+      const fetchedUsers: UserProfile[] = [];
+      snapshot.forEach(doc => fetchedUsers.push(doc.data() as UserProfile));
+
+      if (fetchedUsers.length > 0) {
+        await storage.set(ACCOUNTS_KEY, fetchedUsers);
+        return fetchedUsers;
+      }
+    } catch (e) {
+      console.error("Error fetching users from Firebase:", e);
+    }
+
     const seededAccounts: UserProfile[] = Array.from({ length: 5 }, (_, i) => ({
       id: `singer-${i + 1}`,
       name: `Singer${i + 1}`,
@@ -237,57 +312,33 @@ export const getAllAccounts = async (): Promise<UserProfile[]> => {
       personalHistory: [],
       createdAt: Date.now()
     }));
-    await storage.set(ACCOUNTS_KEY, seededAccounts);
+    // Don't save seeds to Firestore automatically to avoid pollution, just local fallback
     return seededAccounts;
   }
   return accounts;
 };
 
 export const updateAccount = async (profileId: string, updates: Partial<UserProfile>): Promise<{ success: boolean, error?: string }> => {
-  const accounts = await getAllAccounts();
-  const idx = accounts.findIndex(a => a.id === profileId);
-  if (idx > -1) {
-    if (updates.name && accounts.some(a => a.id !== profileId && a.name.toLowerCase() === updates.name?.toLowerCase())) {
-      return { success: false, error: "Username already exists." };
+  try {
+    const userRef = doc(db, "users", profileId);
+    // Check if username/name is being updated and if it is unique
+    if (updates.name) {
+      const accounts = await getAllAccounts();
+      const existing = accounts.find(a => a.id !== profileId && a.name.toLowerCase() === updates.name?.toLowerCase());
+      if (existing) {
+        return { success: false, error: "Username already exists." };
+      }
     }
-    accounts[idx] = { ...accounts[idx], ...updates };
-    await storage.set(ACCOUNTS_KEY, accounts);
-    const active = await getUserProfile();
-    if (active && active.id === profileId) {
-      await storage.set(PROFILE_KEY, accounts[idx]);
-    }
-    if (!isRemoteClient) {
-      syncService.broadcastAction({ type: 'SYNC_PROFILE', payload: accounts[idx], senderId: 'DJ' });
-    }
-    return { success: true };
-  }
-  return { success: false, error: "Account not found." };
-};
 
-export const removeUserFavorite = async (profileId: string, favoriteId: string) => {
-  const accounts = await getAllAccounts();
-  const idx = accounts.findIndex(a => a.id === profileId);
-  if (idx > -1) {
-    accounts[idx].favorites = accounts[idx].favorites.filter(f => f.id !== favoriteId);
-    await storage.set(ACCOUNTS_KEY, accounts);
-    const active = await getUserProfile();
-    if (active && active.id === profileId) {
-      await storage.set(PROFILE_KEY, accounts[idx]);
-    }
-    if (!isRemoteClient) {
-      syncService.broadcastAction({ type: 'SYNC_PROFILE', payload: accounts[idx], senderId: 'DJ' });
-    }
-  }
-};
+    await updateDoc(userRef, updates);
 
-export const updateUserFavorite = async (profileId: string, favoriteId: string, updates: Partial<FavoriteSong>) => {
-  const accounts = await getAllAccounts();
-  const idx = accounts.findIndex(a => a.id === profileId);
-  if (idx > -1) {
-    const fIdx = accounts[idx].favorites.findIndex(f => f.id === favoriteId);
-    if (fIdx > -1) {
-      accounts[idx].favorites[fIdx] = { ...accounts[idx].favorites[fIdx], ...updates };
+    // Update local state immediately for responsiveness (Snapshot will confirm later)
+    const accounts = await getAllAccounts();
+    const idx = accounts.findIndex(a => a.id === profileId);
+    if (idx > -1) {
+      accounts[idx] = { ...accounts[idx], ...updates };
       await storage.set(ACCOUNTS_KEY, accounts);
+
       const active = await getUserProfile();
       if (active && active.id === profileId) {
         await storage.set(PROFILE_KEY, accounts[idx]);
@@ -295,6 +346,32 @@ export const updateUserFavorite = async (profileId: string, favoriteId: string, 
       if (!isRemoteClient) {
         syncService.broadcastAction({ type: 'SYNC_PROFILE', payload: accounts[idx], senderId: 'DJ' });
       }
+    }
+    return { success: true };
+  } catch (e: any) {
+    console.error("Error updating account:", e);
+    return { success: false, error: e.message };
+  }
+};
+
+export const removeUserFavorite = async (profileId: string, favoriteId: string) => {
+  const accounts = await getAllAccounts();
+  const idx = accounts.findIndex(a => a.id === profileId);
+  if (idx > -1) {
+    const updatedFavorites = accounts[idx].favorites.filter(f => f.id !== favoriteId);
+    await updateAccount(profileId, { favorites: updatedFavorites });
+  }
+};
+
+export const updateUserFavorite = async (profileId: string, favoriteId: string, updates: Partial<FavoriteSong>) => {
+  const accounts = await getAllAccounts();
+  const idx = accounts.findIndex(a => a.id === profileId);
+  if (idx > -1) {
+    const favorites = [...accounts[idx].favorites];
+    const fIdx = favorites.findIndex(f => f.id === favoriteId);
+    if (fIdx > -1) {
+      favorites[fIdx] = { ...favorites[fIdx], ...updates };
+      await updateAccount(profileId, { favorites });
     }
   }
 };
@@ -304,15 +381,8 @@ export const addUserFavorite = async (profileId: string, song: Omit<FavoriteSong
   const idx = accounts.findIndex(a => a.id === profileId);
   if (idx > -1) {
     const newFav = { ...song, id: Math.random().toString(36).substr(2, 9) };
-    accounts[idx].favorites.push(newFav);
-    await storage.set(ACCOUNTS_KEY, accounts);
-    const active = await getUserProfile();
-    if (active && active.id === profileId) {
-      await storage.set(PROFILE_KEY, accounts[idx]);
-    }
-    if (!isRemoteClient) {
-      syncService.broadcastAction({ type: 'SYNC_PROFILE', payload: accounts[idx], senderId: 'DJ' });
-    }
+    const favorites = [...accounts[idx].favorites, newFav];
+    await updateAccount(profileId, { favorites });
   }
 };
 
@@ -320,15 +390,8 @@ export const removeUserHistoryItem = async (profileId: string, historyId: string
   const accounts = await getAllAccounts();
   const idx = accounts.findIndex(a => a.id === profileId);
   if (idx > -1) {
-    accounts[idx].personalHistory = accounts[idx].personalHistory.filter(h => h.id !== historyId);
-    await storage.set(ACCOUNTS_KEY, accounts);
-    const active = await getUserProfile();
-    if (active && active.id === profileId) {
-      await storage.set(PROFILE_KEY, accounts[idx]);
-    }
-    if (!isRemoteClient) {
-      syncService.broadcastAction({ type: 'SYNC_PROFILE', payload: accounts[idx], senderId: 'DJ' });
-    }
+    const personalHistory = accounts[idx].personalHistory.filter(h => h.id !== historyId);
+    await updateAccount(profileId, { personalHistory });
   }
 };
 
@@ -336,30 +399,35 @@ export const updateUserHistoryItem = async (profileId: string, historyId: string
   const accounts = await getAllAccounts();
   const idx = accounts.findIndex(a => a.id === profileId);
   if (idx > -1) {
-    const hIdx = accounts[idx].personalHistory.findIndex(h => h.id === historyId);
+    const personalHistory = [...accounts[idx].personalHistory];
+    const hIdx = personalHistory.findIndex(h => h.id === historyId);
     if (hIdx > -1) {
-      accounts[idx].personalHistory[hIdx] = { ...accounts[idx].personalHistory[hIdx], ...updates };
-      await storage.set(ACCOUNTS_KEY, accounts);
-      const active = await getUserProfile();
-      if (active && active.id === profileId) {
-        await storage.set(PROFILE_KEY, accounts[idx]);
-      }
-      if (!isRemoteClient) {
-        syncService.broadcastAction({ type: 'SYNC_PROFILE', payload: accounts[idx], senderId: 'DJ' });
-      }
+      personalHistory[hIdx] = { ...personalHistory[hIdx], ...updates };
+      await updateAccount(profileId, { personalHistory });
     }
   }
 };
 
 export const deleteAccount = async (profileId: string) => {
   await removeParticipant(profileId);
-  let accounts = await getAllAccounts();
-  accounts = accounts.filter(a => a.id !== profileId);
-  await storage.set(ACCOUNTS_KEY, accounts);
+  // Deleting user from Firestore is not typically done from client sdk directly for Auth users
+  // But we can delete the document.
+  // For now, let's just delete the processed document.
+  try {
+    // NOTE: We cannot delete the Auth user easily from here without Admin SDK or re-authentication
+    // Just delete the profile doc
+    // await deleteDoc(doc(db, "users", profileId)); 
+    // Commented out to avoid accidental data loss during dev, maybe just flag as deleted?
+    let accounts = await getAllAccounts();
+    accounts = accounts.filter(a => a.id !== profileId);
+    await storage.set(ACCOUNTS_KEY, accounts);
+  } catch (e) {
+    console.error("Error deleting account", e);
+  }
+
   const active = await getUserProfile();
   if (active && active.id === profileId) {
-    if (isExtension) await (window as any).chrome.storage.local.remove([PROFILE_KEY]);
-    else localStorage.removeItem(PROFILE_KEY);
+    await logoutUser();
   }
 };
 
@@ -368,52 +436,108 @@ export const getUserProfile = async (): Promise<UserProfile | null> => {
 };
 
 export const saveUserProfile = async (profile: UserProfile) => {
+  // Save to Firestore
+  await updateAccount(profile.id, profile);
+  // Update local
   await storage.set(PROFILE_KEY, profile);
-  const accounts = await getAllAccounts();
-  const existingIdx = accounts.findIndex(a => a.id === profile.id);
-  if (existingIdx > -1) {
-    accounts[existingIdx] = profile;
-  } else {
-    accounts.push(profile);
-  }
-  await storage.set(ACCOUNTS_KEY, accounts);
 };
 
 export const registerUser = async (data: Partial<UserProfile>, autoLogin = false): Promise<{ success: boolean, error?: string, profile?: UserProfile }> => {
-  const accounts = await getAllAccounts();
-  const existing = accounts.find(a => a.name.toLowerCase() === data.name?.toLowerCase());
+  try {
+    let uid = data.id;
+    const isFirebaseUser = !!(data.password && data.email);
+    const isLocalUser = !!(data.password && !data.email);
 
-  if (existing) {
-    if (existing.password) {
-      return { success: false, error: "Username is registered. Please login with password." };
-    }
-    // If it's a guest account and we're NOT in autoLogin mode (e.g. DJ creating a guest), prevent duplicate names
-    if (!autoLogin) {
-      return { success: false, error: "Username already exists." };
-    }
-    // For autoLogin (Participant view joining as guest), we might want to allow joining existing guest profiles,
-    // which is the current behavior (returning the found profile below if it has no password).
-    return { success: true, profile: existing };
-  }
+    if (isFirebaseUser) {
+      try {
+        const credential = await createUserWithEmailAndPassword(auth, data.email!, data.password!);
+        uid = credential.user.uid;
+      } catch (e: any) {
+        if (e.code === 'auth/email-already-in-use') {
+          return { success: false, error: "Email already in use." };
+        }
+        throw e;
+      }
+    } else if (isLocalUser) {
+      // Local User: Create synthetic email to satisfy Firebase Auth
+      const syntheticEmail = `${data.name?.replace(/\s+/g, '').toLowerCase()}@singmode.app`;
+      try {
+        const credential = await createUserWithEmailAndPassword(auth, syntheticEmail, data.password!);
+        uid = credential.user.uid;
+      } catch (e: any) {
+        if (e.code === 'auth/email-already-in-use') {
+          return { success: false, error: "Username already taken." };
+        }
+        throw e;
+      }
+    } else {
+      // Guest User: Rename potential duplicate and Sign In Anonymously
+      const accounts = await getAllAccounts();
+      const existing = accounts.find(a => a.name.toLowerCase() === data.name?.trim().toLowerCase());
 
-  const profile: UserProfile = {
-    id: data.id || Math.random().toString(36).substr(2, 9),
-    name: data.name || '',
-    password: data.password || undefined,
-    favorites: data.favorites || [],
-    personalHistory: data.personalHistory || [],
-    createdAt: Date.now()
-  };
-  accounts.push(profile);
-  await storage.set(ACCOUNTS_KEY, accounts);
-  if (autoLogin) {
-    await storage.set(PROFILE_KEY, profile);
-  } else if (!isRemoteClient) {
-    // If DJ is registering someone, broadcast it (optional but good for consistency)
-    syncService.broadcastAction({ type: 'SYNC_PROFILE', payload: profile, senderId: 'DJ' });
+      if (existing) {
+        try {
+          const date = new Date(existing.createdAt || Date.now());
+          const dateStr = `${date.getMonth() + 1}/${date.getDate()}`;
+          const newName = `${existing.name} (${dateStr})`;
+
+          // Update local cache for OLD user
+          existing.name = newName;
+          await storage.set(ACCOUNTS_KEY, accounts);
+        } catch (err) {
+          console.warn("Failed to rename existing user locally:", err);
+        }
+      }
+
+      // Anonymous Auth for Guest
+      try {
+        const credential = await signInAnonymously(auth);
+        uid = credential.user.uid;
+      } catch (e: any) {
+        console.error("Anon Auth Error:", e);
+        return { success: false, error: "Guest login failed." };
+      }
+    }
+
+    const profile: UserProfile = {
+      id: uid!,
+      name: data.name?.trim() || 'Guest',
+      email: data.email || undefined,
+      password: isLocalUser ? data.password : undefined,
+      favorites: data.favorites || [],
+      personalHistory: data.personalHistory || [],
+      createdAt: Date.now()
+    };
+
+    const profileData = JSON.parse(JSON.stringify(profile));
+
+    // Save profile to Firestore
+    await setDoc(doc(db, "users", uid!), profileData);
+
+    const accounts = await getAllAccounts();
+    if (!accounts.some(a => a.id === uid)) {
+      accounts.push(profile);
+      await storage.set(ACCOUNTS_KEY, accounts);
+    }
+
+    if (autoLogin) {
+      await storage.set(PROFILE_KEY, profile);
+    } else if (!isRemoteClient) {
+      try {
+        syncService.broadcastAction({ type: 'SYNC_PROFILE', payload: profile, senderId: 'DJ' });
+      } catch (e) { }
+    }
+    return { success: true, profile };
+
+  } catch (e: any) {
+    console.error("Registration error:", e);
+    return { success: false, error: e.message };
   }
-  return { success: true, profile };
 };
+
+// Helper for generating IDs
+const activeId = () => { return undefined; } // Placeholder helper
+
 
 export const loginUser = async (name: string, password?: string): Promise<{ success: boolean, error?: string, profile?: UserProfile }> => {
   // D.14: Super User Authentication
@@ -430,30 +554,64 @@ export const loginUser = async (name: string, password?: string): Promise<{ succ
     return { success: true, profile: adminProfile };
   }
 
+  // Try to find user in local list first to see if they exist
   const accounts = await getAllAccounts();
   const found = accounts.find(a => a.name.toLowerCase() === name.toLowerCase());
-  if (!found) {
-    if (!password) {
-      return await registerUser({ name }, true);
+
+  if (!found && !password) {
+    // Guest login attempt
+    return await registerUser({ name }, true);
+  }
+
+  if (password) {
+    try {
+      // Attempt Firebase Auth Login
+      // Construct email from name
+      const email = `${name.replace(/\s+/g, '').toLowerCase()}@singmode.app`;
+      const credential = await signInWithEmailAndPassword(auth, email, password);
+      const uid = credential.user.uid;
+
+      // Fetch profile
+      const userDoc = await getDoc(doc(db, "users", uid));
+      if (userDoc.exists()) {
+        const profile = userDoc.data() as UserProfile;
+        await storage.set(PROFILE_KEY, profile);
+        return { success: true, profile };
+      } else {
+        // Auth success but no profile? Create one?
+        if (found) {
+          // We have a local profile but no remote one? Migration case maybe?
+          // For now, just return found
+          return { success: true, profile: found };
+        }
+        return { success: false, error: "Profile data missing." };
+      }
+
+    } catch (e: any) {
+      // Fallback to local check if firebase fails (e.g. migration transition or legacy users)
+      console.warn("Firebase login failed, checking legacy local storage:", e);
+      if (found) {
+        if (found.password && found.password === password) {
+          // It's a legacy user
+          await storage.set(PROFILE_KEY, found);
+          return { success: true, profile: found };
+        }
+        return { success: false, error: "Incorrect passkey." };
+      }
+      return { success: false, error: e.message || "Login failed." };
     }
-    return { success: false, error: "User handle not found." };
-  }
-  if (found.password && found.password !== password) {
-    return { success: false, error: "This handle is protected. Incorrect passkey." };
   }
 
-  // D.6.1 & D.6.2: Check if banned
-  const session = await getSession();
-  const banRecord = session.bannedUsers?.find(b => b.id === found.id);
-  if (banRecord) {
-    return { success: false, error: `ACCESS DENIED: ${banRecord.reason}` };
+  // Guest login with existing handle?
+  if (found && !found.password) {
+    return { success: true, profile: found };
   }
 
-  await storage.set(PROFILE_KEY, found);
-  return { success: true, profile: found };
+  return { success: false, error: "User handle not found." };
 };
 
 export const logoutUser = async () => {
+  await signOut(auth);
   if (isExtension) await (window as any).chrome.storage.local.remove([PROFILE_KEY]);
   else localStorage.removeItem(PROFILE_KEY);
   window.dispatchEvent(new Event('kstar_sync'));
@@ -1109,4 +1267,55 @@ export const cleanupExpiredGuestAccounts = async () => {
     }
     console.log(`Cleaned up ${toDelete.length} expired guest accounts.`);
   }
+};
+
+export const registerSession = async (metadata: Omit<ActiveSession, 'participantsCount'>) => {
+  try {
+    const sessionData: ActiveSession = {
+      ...metadata,
+      participantsCount: 0
+    };
+    await setDoc(doc(db, "sessions", metadata.id), sessionData);
+  } catch (e) {
+    console.error("Error registering session:", e);
+  }
+};
+
+export const unregisterSession = async (sessionId: string) => {
+  try {
+    const sessionDoc = doc(db, "sessions", sessionId);
+    // Determine if we should delete or just mark inactive
+    // For now delete to keep clean
+    await deleteDoc(sessionDoc);
+  } catch (e) {
+    console.error("Error unregistering session:", e);
+  }
+};
+
+export const getActiveSessions = async (): Promise<ActiveSession[]> => {
+  try {
+    const sessionsRef = collection(db, "sessions");
+    const q = query(sessionsRef, where("isActive", "==", true));
+    const snapshot = await getDocs(q);
+    const sessions: ActiveSession[] = [];
+    snapshot.forEach(doc => {
+      sessions.push(doc.data() as ActiveSession);
+    });
+    return sessions;
+  } catch (e) {
+    console.error("Error fetching sessions:", e);
+    return [];
+  }
+};
+
+export const subscribeToSessions = (callback: (sessions: ActiveSession[]) => void) => {
+  const sessionsRef = collection(db, "sessions");
+  const q = query(sessionsRef, where("isActive", "==", true));
+  return onSnapshot(q, (snapshot) => {
+    const sessions: ActiveSession[] = [];
+    snapshot.forEach(doc => {
+      sessions.push(doc.data() as ActiveSession);
+    });
+    callback(sessions);
+  });
 };
