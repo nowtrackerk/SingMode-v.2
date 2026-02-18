@@ -31,3 +31,4 @@ Windows/installer/win-unpacked/
 *.njsproj
 *.sln
 *.sw?
+.env
