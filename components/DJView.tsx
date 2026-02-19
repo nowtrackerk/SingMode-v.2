@@ -12,7 +12,8 @@ import {
   addVerifiedSong, updateVerifiedSong, deleteVerifiedSong,
   reorderCurrentRound, reorderRequests, reorderPendingRequests,
   banUser, setMaxRequestsPerUser, markRequestAsDone, logoutUser,
-  assignUserToDevice, removeDevice, setQueueStrategy, unregisterSession, subscribeToSessions
+  assignUserToDevice, removeDevice, setQueueStrategy, unregisterSession, subscribeToSessions,
+  administrativeCleanup
 } from '../services/sessionManager';
 import SongRequestForm from './SongRequestForm';
 import { syncService } from '../services/syncService';
@@ -1818,6 +1819,22 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
                   {managedProfile && (
                     <button onClick={() => setManagedProfile(null)} className="px-6 py-3 bg-black border border-white/10 text-white rounded-xl text-sm font-black uppercase tracking-widest font-righteous hover:bg-white/10 transition-all">← ALL ACCOUNTS</button>
                   )}
+                  <button
+                    onClick={async () => {
+                      if (confirm('DANGER: This will permanently delete ALL GUEST ACCOUNTS and DUPLICATE ENTRIES from the Firestore database. Proceed?')) {
+                        const res = await administrativeCleanup();
+                        if (res.success) {
+                          alert(`DATABASE CLEANUP SUCCESS: Removed ${res.deletedCount} orphan records.`);
+                          await refresh();
+                        } else {
+                          alert(`CLEANUP FAILED: ${res.error}`);
+                        }
+                      }
+                    }}
+                    className="px-6 py-3 bg-rose-500/10 border border-rose-500/50 text-rose-500 rounded-xl text-sm font-black uppercase tracking-widest font-righteous hover:bg-rose-500 hover:text-white transition-all hover:scale-105"
+                  >
+                    PURGE GUESTS
+                  </button>
                   <button
                     onClick={() => setIsCreatingProfile(true)}
                     className="px-6 py-3 bg-[var(--neon-cyan)] text-black rounded-xl text-sm font-black uppercase tracking-widest font-righteous shadow-[0_0_20px_rgba(0,229,255,0.3)] hover:bg-white transition-all hover:scale-105"
