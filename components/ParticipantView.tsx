@@ -501,10 +501,17 @@ const ParticipantView: React.FC = () => {
                 {/* Left Side: Info Strip */}
                 <div className="flex items-center gap-6 min-w-0 flex-1 z-10">
                   {/* ID Box */}
-                  <div className="w-14 h-full flex flex-col justify-center items-center border-r border-white/10 pr-4 shrink-0">
-                    <span className={`text-xl font-bold font-mono tracking-tighter ${i === 0 ? 'text-[var(--neon-green)]' : 'text-slate-400'}`}>
-                      {song.requestNumber}
-                    </span>
+                  <div className="relative">
+                    {i === 0 && (
+                      <div className="absolute -top-6 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-[var(--neon-green)] text-black text-[8px] font-black uppercase tracking-[0.2em] rounded animate-pulse shadow-[0_0_10px_var(--neon-green)] z-20">
+                        LIVE
+                      </div>
+                    )}
+                    <div className={`w-14 h-14 flex flex-col justify-center items-center border-2 rounded-xl transition-all shrink-0 ${i === 0 ? 'border-[var(--neon-green)] bg-[var(--neon-green)]/10 text-[var(--neon-green)]' : 'border-white/10 text-slate-400'}`}>
+                      <span className="text-xl font-bold font-mono tracking-tighter">
+                        {song.requestNumber}
+                      </span>
+                    </div>
                   </div>
 
                   {/* Main Info */}
@@ -522,11 +529,6 @@ const ParticipantView: React.FC = () => {
 
                 {/* Right Side: Status/Link */}
                 <div className="flex items-center gap-3 z-10 pl-4 border-l border-white/10 bg-gradient-to-l from-black/80 to-transparent">
-                  {i === 0 && (
-                    <div className="px-3 py-1 bg-[var(--neon-green)] text-black text-[10px] font-black uppercase tracking-[0.2em] rounded animate-pulse shadow-[0_0_10px_var(--neon-green)] shrink-0">
-                      LIVE
-                    </div>
-                  )}
                   {i === 0 && <VideoLink url={song.youtubeUrl} />}
                 </div>
               </div>

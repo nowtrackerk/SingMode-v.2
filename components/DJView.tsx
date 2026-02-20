@@ -833,11 +833,26 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
 
                             {/* Left Side: Info Strip */}
                             <div className="flex items-center gap-6 min-w-0 flex-1 z-10">
-                              {/* ID Box */}
-                              <div className="w-16 h-full flex flex-col justify-center items-center border-r border-white/10 pr-4 shrink-0">
-                                <span className={`text-xl font-bold font-mono tracking-tighter ${isActive ? 'text-[var(--neon-green)]' : 'text-slate-400'}`}>
-                                  {song.requestNumber}
-                                </span>
+                              {/* ID Box with Copy Action */}
+                              <div className="relative">
+                                {isActive && (
+                                  <div className="absolute -top-6 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-[var(--neon-green)] text-black text-[8px] font-black uppercase tracking-[0.2em] rounded animate-pulse shadow-[0_0_10px_var(--neon-green)] z-20">
+                                    LIVE
+                                  </div>
+                                )}
+                                <button
+                                  onClick={() => {
+                                    const suffix = song.type === RequestType.SINGING ? ' Karaoke' : ' Lyric';
+                                    const text = `${song.songName} ${song.artist}${suffix}`;
+                                    navigator.clipboard.writeText(text);
+                                  }}
+                                  title="Copy Command String"
+                                  className={`w-16 h-16 flex flex-col justify-center items-center border-2 rounded-2xl transition-all shrink-0 active:scale-95 ${isActive ? 'border-[var(--neon-green)] bg-[var(--neon-green)]/10 text-[var(--neon-green)] shadow-[0_0_15px_rgba(0,255,157,0.2)]' : 'border-white/10 text-slate-400 hover:border-white/30 hover:bg-white/5'}`}
+                                >
+                                  <span className="text-2xl font-bold font-mono tracking-tighter">
+                                    {song.requestNumber}
+                                  </span>
+                                </button>
                               </div>
 
                               {/* Main Info */}
@@ -858,26 +873,25 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
 
                             {/* Right Side: Control Cluster */}
                             <div className="flex items-center gap-3 z-10 pl-4 border-l border-white/10 bg-gradient-to-l from-black/80 to-transparent">
-                              {isActive && (
-                                <div className="px-3 py-1 bg-[var(--neon-green)] text-black text-[10px] font-black uppercase tracking-[0.2em] rounded animate-pulse shadow-[0_0_10px_var(--neon-green)] mr-2 shrink-0">
-                                  LIVE
-                                </div>
-                              )}
-
-                              <CopyButton request={song} />
-
                               <button
-                                disabled={song.status === RequestStatus.DONE}
                                 onClick={async () => {
-                                  await markRequestAsDone(song.id);
+                                  if (song.status === RequestStatus.DONE) {
+                                    // Assuming we can revert if needed, but for now toggle logic
+                                    await updateRequest(song.id, { status: RequestStatus.APPROVED });
+                                  } else {
+                                    await markRequestAsDone(song.id);
+                                  }
                                   await refresh();
                                 }}
-                                className={`h-8 px-4 rounded text-xs font-black uppercase tracking-wider font-righteous transition-all border ${song.status === RequestStatus.DONE
-                                  ? 'bg-white/5 text-white/30 border-white/5 cursor-not-allowed'
-                                  : 'bg-[var(--neon-cyan)]/10 text-[var(--neon-cyan)] border-[var(--neon-cyan)]/50 hover:bg-[var(--neon-cyan)] hover:text-black'
+                                title={song.status === RequestStatus.DONE ? "Undo Done" : "Mark as Done"}
+                                className={`p-2 rounded-xl transition-all border-2 ${song.status === RequestStatus.DONE
+                                  ? 'text-yellow-500 border-yellow-500/30 bg-yellow-500/10 shadow-[0_0_15px_rgba(234,179,8,0.2)]'
+                                  : 'text-slate-600 border-white/5 hover:border-white/20 hover:text-white'
                                   }`}
                               >
-                                {song.status === RequestStatus.DONE ? 'DONE' : 'MARK DONE'}
+                                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
+                                  <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
                               </button>
 
                               <button
@@ -2431,7 +2445,8 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
               </div>
             </div>
           </div>
-        )}
+        )
+      }
 
       <style>{`
         @keyframes gradient-x {
@@ -2472,56 +2487,58 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
           background: rgba(255, 255, 255, 0.2);
         }
       `}</style>
-      {activeTab === 'ADMIN' && (
-        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-          <div className="bg-[#0a0a10]/90 backdrop-blur-2xl rounded-[3rem] p-10 border border-white/5 shadow-2xl relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[var(--neon-green)]/10 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/4 pointer-events-none"></div>
+      {
+        activeTab === 'ADMIN' && (
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="bg-[#0a0a10]/90 backdrop-blur-2xl rounded-[3rem] p-10 border border-white/5 shadow-2xl relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[var(--neon-green)]/10 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/4 pointer-events-none"></div>
 
-            <div className="flex justify-between items-center mb-10 relative z-10">
-              <div>
-                <h2 className="text-4xl font-bold font-bungee text-white uppercase flex items-center gap-4 neon-glow-green">
-                  <span className="text-5xl">🛡️</span> SESSION CONTROL
-                </h2>
-                <p className="text-slate-500 font-bold uppercase tracking-widest mt-2 font-righteous">MANAGE ACTIVE INSTANCES</p>
+              <div className="flex justify-between items-center mb-10 relative z-10">
+                <div>
+                  <h2 className="text-4xl font-bold font-bungee text-white uppercase flex items-center gap-4 neon-glow-green">
+                    <span className="text-5xl">🛡️</span> SESSION CONTROL
+                  </h2>
+                  <p className="text-slate-500 font-bold uppercase tracking-widest mt-2 font-righteous">MANAGE ACTIVE INSTANCES</p>
+                </div>
               </div>
-            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {activeSessions.map((s) => (
-                <div key={s.id} className="bg-black/40 border-2 border-white/5 rounded-[2rem] p-6 relative overflow-hidden group hover:border-[var(--neon-green)] transition-all">
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="w-12 h-12 bg-black rounded-xl border border-white/10 flex items-center justify-center text-2xl">
-                      {s.id === session?.id ? '📍' : '🌐'}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {activeSessions.map((s) => (
+                  <div key={s.id} className="bg-black/40 border-2 border-white/5 rounded-[2rem] p-6 relative overflow-hidden group hover:border-[var(--neon-green)] transition-all">
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="w-12 h-12 bg-black rounded-xl border border-white/10 flex items-center justify-center text-2xl">
+                        {s.id === session?.id ? '📍' : '🌐'}
+                      </div>
+                      <div className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border ${s.id === session?.id ? 'bg-[var(--neon-cyan)]/20 text-[var(--neon-cyan)] border-[var(--neon-cyan)]' : 'bg-slate-800 text-slate-400 border-white/10'}`}>
+                        {s.id === session?.id ? 'CURRENT' : 'REMOTE'}
+                      </div>
                     </div>
-                    <div className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border ${s.id === session?.id ? 'bg-[var(--neon-cyan)]/20 text-[var(--neon-cyan)] border-[var(--neon-cyan)]' : 'bg-slate-800 text-slate-400 border-white/10'}`}>
-                      {s.id === session?.id ? 'CURRENT' : 'REMOTE'}
-                    </div>
+                    <h3 className="text-xl font-black text-white uppercase truncate font-bungee mb-1">{s.venueName || 'Unknown Venue'}</h3>
+                    <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-6 font-righteous">HOST: {s.hostName} • ID: {s.id}</p>
+
+                    <button
+                      onClick={async () => {
+                        if (confirm(`Force close session "${s.venueName}"? This cannot be undone.`)) {
+                          await unregisterSession(s.id);
+                        }
+                      }}
+                      className="w-full py-3 bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white border border-rose-500/30 rounded-xl font-black uppercase tracking-widest text-xs transition-all font-righteous"
+                    >
+                      FORCE CLOSE
+                    </button>
                   </div>
-                  <h3 className="text-xl font-black text-white uppercase truncate font-bungee mb-1">{s.venueName || 'Unknown Venue'}</h3>
-                  <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-6 font-righteous">HOST: {s.hostName} • ID: {s.id}</p>
+                ))}
+                {activeSessions.length === 0 && (
+                  <div className="col-span-full text-center py-20 opacity-50">
+                    <p className="text-xl font-black uppercase tracking-widest text-slate-600 font-righteous">NO ACTIVE SESSIONS FOUND</p>
+                  </div>
+                )}
+              </div>
 
-                  <button
-                    onClick={async () => {
-                      if (confirm(`Force close session "${s.venueName}"? This cannot be undone.`)) {
-                        await unregisterSession(s.id);
-                      }
-                    }}
-                    className="w-full py-3 bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white border border-rose-500/30 rounded-xl font-black uppercase tracking-widest text-xs transition-all font-righteous"
-                  >
-                    FORCE CLOSE
-                  </button>
-                </div>
-              ))}
-              {activeSessions.length === 0 && (
-                <div className="col-span-full text-center py-20 opacity-50">
-                  <p className="text-xl font-black uppercase tracking-widest text-slate-600 font-righteous">NO ACTIVE SESSIONS FOUND</p>
-                </div>
-              )}
             </div>
-
           </div>
-        </div>
-      )}
+        )
+      }
 
       {
         activeTab === 'NETWORK' && (
