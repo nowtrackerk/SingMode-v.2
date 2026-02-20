@@ -918,7 +918,7 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
               <section className="bg-[#10002B]/80 border-2 border-[var(--neon-blue)]/30 rounded-[3rem] p-10 shadow-[0_0_60px_rgba(5,217,232,0.1)] relative overflow-hidden backdrop-blur-md">
                 <div className="flex justify-between items-center mb-8 px-2">
                   <h2 className="text-4xl font-bold font-bungee text-white uppercase flex items-center gap-4 neon-glow-cyan">
-                    <span className="text-[var(--neon-blue)]">⟳</span> QUEUE VALIDATION
+                    <span className="text-[var(--neon-blue)]">⟳</span> REQUESTS
                   </h2>
                   <span className="px-6 py-2 bg-[var(--neon-blue)]/10 border border-[var(--neon-blue)]/30 rounded-full text-base text-[var(--neon-blue)] font-bold tracking-widest font-righteous">
                     {pendingRequests.length} PENDING
@@ -977,7 +977,7 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
               <div className="flex flex-col gap-10">
                 <section className="bg-[#10002B]/60 border-2 border-[var(--neon-yellow)]/20 rounded-[3rem] p-10 shadow-2xl relative overflow-hidden backdrop-blur-sm">
                   <h3 className="text-5xl font-bold font-bungee text-white uppercase mb-8 px-2 neon-glow-yellow flex items-center gap-4">
-                    <span className="text-[var(--neon-yellow)] animate-pulse">★</span> READY NODES
+                    <span className="text-[var(--neon-yellow)] animate-pulse">★</span> QUEUE
                   </h3>
                   <div className="flex flex-col gap-3">
                     {approvedSinging.map((req, i) => (
@@ -1074,7 +1074,7 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
                   <div className="space-y-10">
                     <div className="p-6 bg-black/40 rounded-3xl border border-white/5 space-y-6">
                       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                        <label className="text-sm md:text-base font-black text-[var(--neon-cyan)] uppercase tracking-[0.2em] font-righteous opacity-80 break-words">MAX_REQUESTS_PER_NODE</label>
+                        <label className="text-sm md:text-base font-black text-[var(--neon-cyan)] uppercase tracking-[0.2em] font-righteous opacity-80 break-words">REQUEST LIMIT</label>
                         <span className="text-4xl font-black text-white font-bungee neon-glow-cyan">{session.maxRequestsPerUser || 5}</span>
                       </div>
                       <input
@@ -1253,7 +1253,7 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
                 <section className="glass-panel border-4 rounded-[4rem] p-12 shadow-[0_0_100px_rgba(0,255,157,0.3)] relative overflow-hidden neon-sign-border-green">
                   <div className="flex items-center gap-8 mb-12">
                     <div className="w-8 h-8 bg-[var(--neon-green)] rounded-full animate-ping shadow-[0_0_25px_var(--neon-green)]"></div>
-                    <h3 className="text-6xl font-black text-white uppercase tracking-tighter font-righteous neon-glow-green">CURRENT_ROTATION</h3>
+                    <h3 className="text-6xl font-black text-white uppercase tracking-tighter font-righteous neon-glow-green">NOW PLAYING</h3>
                   </div>
                   <div className="flex flex-col gap-4">
                     {session.currentRound.map((song, i) => {
@@ -1343,7 +1343,7 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
               <section className="bg-[#050510] border-4 border-[var(--neon-cyan)]/30 rounded-[3rem] p-10 shadow-[0_0_80px_rgba(0,229,255,0.15)] relative overflow-hidden backdrop-blur-md">
                 <div className="flex items-center gap-6 mb-10">
                   <div className="w-4 h-4 bg-[var(--neon-cyan)] shadow-[0_0_20px_var(--neon-cyan)] rounded-full animate-pulse"></div>
-                  <h3 className="text-4xl font-bold text-white uppercase tracking-tight font-bungee neon-glow-cyan">UPCOMING NODES</h3>
+                  <h3 className="text-4xl font-bold text-white uppercase tracking-tight font-bungee neon-glow-cyan">UPCOMING</h3>
                 </div>
                 <div className="grid md:grid-cols-2 lg:grid-cols-2 gap-6">
                   {approvedSinging.map((req) => (
@@ -1381,7 +1381,7 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 animate-in slide-in-from-bottom-2 pb-32">
               <section className="lg:col-span-8 bg-[#0a0a0a] border-4 border-[var(--neon-cyan)]/20 rounded-[3rem] p-10 shadow-[0_0_60px_rgba(0,229,255,0.1)] relative overflow-hidden backdrop-blur-md">
                 <div className="flex justify-between items-center mb-10 px-2">
-                  <h2 className="text-4xl font-bold text-white uppercase tracking-tight font-bungee neon-glow-cyan">PERFORMER INDEX</h2>
+                  <h2 className="text-4xl font-bold text-white uppercase tracking-tight font-bungee neon-glow-cyan">SINGERS</h2>
                   <div className="flex items-center gap-4 px-6 py-2 bg-black/40 border border-[var(--neon-cyan)]/30 rounded-full shadow-lg">
                     <div className="w-2 h-2 rounded-full bg-[var(--neon-cyan)] animate-pulse"></div>
                     <span className="text-lg font-bold text-[var(--neon-cyan)] uppercase tracking-widest font-righteous">{liveMicCount} ACTIVE</span>
@@ -1455,7 +1455,7 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
               <section className="lg:col-span-12 bg-black/40 border-4 border-white/5 rounded-[3rem] p-10 mt-10 relative overflow-hidden">
                 <div className="flex justify-between items-center mb-10 px-2">
                   <h2 className="text-4xl font-black text-white uppercase tracking-tighter font-bungee neon-glow-cyan">COMPLETED ROUNDS</h2>
-                  <div className="text-[var(--neon-cyan)]/40 text-sm font-black uppercase tracking-[0.4em] font-righteous">CHRONOLOGICAL_ARCHIVE</div>
+                  <div className="text-[var(--neon-cyan)]/40 text-sm font-black uppercase tracking-[0.4em] font-righteous">HISTORY</div>
                 </div>
 
                 <div className="grid gap-12">
@@ -1516,7 +1516,7 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
                   <div className="absolute inset-0 bg-gradient-to-r from-[var(--neon-pink)]/20 via-[var(--neon-purple)]/20 to-[var(--neon-cyan)]/20 blur-xl opacity-0 group-focus-within:opacity-100 transition-opacity duration-500"></div>
                   <input
                     type="text"
-                    placeholder="SCANNING GLOBAL SONGBOOK..."
+                    placeholder="SEARCH SONGBOOK..."
                     value={librarySearchQuery}
                     onChange={(e) => setLibrarySearchQuery(e.target.value)}
                     className="w-full bg-black/50 border-2 border-white/10 rounded-[2.3rem] py-6 pl-16 pr-32 text-2xl font-bold tracking-widest text-white placeholder:text-slate-600 focus:outline-none focus:border-[var(--neon-pink)] transition-all font-righteous uppercase"
@@ -1883,17 +1883,17 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
                             <UserAvatar name={managedProfile.name} isActive={session.participants.some(p => p.id === managedProfile.id)} />
                           </div>
                           <div className="mt-4">
-                            <div className="text-sm font-bold text-[var(--neon-cyan)] uppercase tracking-widest mb-2 font-righteous">AUTHENTICATED IDENTITY</div>
+                            <div className="text-sm font-bold text-[var(--neon-cyan)] uppercase tracking-widest mb-2 font-righteous">SINGER PROFILE</div>
                             <h3 className="text-5xl font-bold text-white uppercase tracking-tight leading-none font-bungee break-words">{managedProfile.name}</h3>
                           </div>
 
                           <div className="w-full mt-8 space-y-3 pt-6 border-t border-white/5">
                             <div className="flex justify-between items-center text-sm uppercase font-black font-righteous tracking-widest">
-                              <span className="text-slate-600">ID SIGNATURE</span>
+                              <span className="text-slate-600">SINGER ID</span>
                               <span className="text-[var(--neon-pink)] font-mono opacity-80">{managedProfile.id.slice(0, 8)}...</span>
                             </div>
                             <div className="flex justify-between items-center text-sm uppercase font-black font-righteous tracking-widest">
-                              <span className="text-slate-600">ENCRYPTION</span>
+                              <span className="text-slate-600">SECURITY</span>
                               <span className={`px-2 py-0.5 rounded-full ${managedProfile.password ? 'bg-[var(--neon-pink)]/10 text-[var(--neon-pink)]' : 'bg-slate-900 text-slate-600'}`}>
                                 {managedProfile.password ? 'SECURE PIN' : 'OPEN LINK'}
                               </span>
@@ -1901,40 +1901,11 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
                           </div>
 
                           <div className="w-full mt-10 space-y-3">
-                            <button onClick={() => startChangePassword(managedProfile)} className="w-full py-3 bg-black border border-white/10 hover:border-[var(--neon-pink)] text-white rounded-xl text-sm font-black uppercase tracking-widest transition-all font-righteous">MODIFY SECURITY</button>
-                            <button onClick={async () => { await joinSession(managedProfile.id); await refresh(); }} className="w-full py-3 bg-[var(--neon-cyan)] text-black rounded-xl text-sm font-black uppercase tracking-widest transition-all shadow-[0_0_15px_rgba(0,229,255,0.3)] font-righteous hover:bg-white">FORCE RE-JOIN</button>
-                            <div className="pt-2 border-t border-white/5 mt-2 space-y-2">
-                              {session.bannedUsers?.some(b => b.id === managedProfile.id) ? (
-                                <button
-                                  onClick={async () => { await banUser(managedProfile.id, managedProfile.name, 'unban'); await refresh(); }}
-                                  className="w-full py-3 bg-[var(--neon-green)]/10 hover:bg-[var(--neon-green)] text-[var(--neon-green)] hover:text-black rounded-xl text-sm font-black uppercase tracking-widest transition-all font-righteous border border-[var(--neon-green)]/30"
-                                >
-                                  LIFT_BAN_IDENTITY
-                                </button>
-                              ) : (
-                                <>
-                                  <input
-                                    type="text"
-                                    placeholder="JUSTIFICATION REQUIRED..."
-                                    value={banReason}
-                                    onChange={(e) => setBanReason(e.target.value)}
-                                    className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2 text-base text-white font-bold uppercase tracking-widest font-righteous outline-none focus:border-rose-500 transition-all mb-1"
-                                  />
-                                  <button
-                                    onClick={async () => {
-                                      if (!banReason) return alert('Provide a reason for the ban sequence.');
-                                      await banUser(managedProfile.id, managedProfile.name, banReason);
-                                      setBanReason('');
-                                      setManagedProfile(null);
-                                      await refresh();
-                                    }}
-                                    className="w-full py-3 bg-rose-500/10 hover:bg-rose-500 text-rose-500 rounded-xl text-sm font-black uppercase tracking-widest transition-all font-righteous border border-rose-500/30"
-                                  >
-                                    TERMINATE_SIGNAL (BAN)
-                                  </button>
-                                </>
-                              )}
-                            </div>
+                            <button onClick={() => startChangePassword(managedProfile)} className="w-full py-3 bg-black border border-white/10 hover:border-[var(--neon-pink)] text-white rounded-xl text-sm font-black uppercase tracking-widest transition-all font-righteous">CHANGE PASSWORD</button>
+                            <button onClick={async () => { await joinSession(managedProfile.id); await refresh(); }} className="w-full py-3 bg-[var(--neon-cyan)] text-black rounded-xl text-sm font-black uppercase tracking-widest transition-all shadow-[0_0_15px_rgba(0,229,255,0.3)] font-righteous hover:bg-white">SYNC QR CODE</button>
+                             <div className="pt-2 border-t border-white/5 mt-2 space-y-2">
+                               {/* Ban functionality removed as requested */}
+                             </div>
                             <button onClick={async () => { if (confirm('Permanently delete this account?')) { await deleteAccount(managedProfile.id); setManagedProfile(null); await refresh(); } }} className="w-full py-3 bg-rose-500/5 hover:bg-rose-500 text-rose-500/40 hover:text-white rounded-xl text-sm font-black uppercase tracking-widest transition-all border border-transparent hover:border-rose-500/30 font-righteous mt-2">TERMINATE ACCOUNT</button>
                           </div>
                         </div>

@@ -293,7 +293,7 @@ const ParticipantView: React.FC = () => {
         <h1 className="text-6xl md:text-8xl font-bold font-bungee text-white mb-6 uppercase tracking-tight neon-text-glow-purple leading-none">
           SINGMODE
         </h1>
-        <p className="text-[var(--neon-cyan)] font-righteous mb-16 uppercase tracking-[0.6em] text-lg font-black neon-glow-cyan">MEMBER ACCESS</p>
+        <p className="text-[var(--neon-cyan)] font-righteous mb-16 uppercase tracking-[0.6em] text-lg font-black neon-glow-cyan">SINGER LOGIN</p>
 
         <div className="w-full max-w-lg mb-12 relative z-20">
           <button
@@ -371,7 +371,7 @@ const ParticipantView: React.FC = () => {
 
           {!isLoginMode && (
             <div className="space-y-4">
-              <label className="block text-base font-black text-slate-500 uppercase tracking-[0.3em] mb-3 text-left font-righteous ml-4">CONFIRM_PASS</label>
+              <label className="block text-base font-black text-slate-500 uppercase tracking-[0.3em] mb-3 text-left font-righteous ml-4">CONFIRM PASSWORD</label>
               <input
                 type="password"
                 required
@@ -730,7 +730,7 @@ const ParticipantView: React.FC = () => {
             <div className="relative group">
               <input
                 type="text"
-                placeholder="SEARCH ARCHIVE..."
+                placeholder="SEARCH SONGBOOK..."
                 value={librarySearchQuery}
                 onChange={(e) => setLibrarySearchQuery(e.target.value)}
                 className="w-full bg-[#101015] border-2 border-white/10 rounded-[2rem] py-5 px-6 pl-14 text-xl font-bold uppercase tracking-wider text-white focus:outline-none focus:border-[var(--neon-pink)] transition-all font-righteous placeholder:text-slate-600 shadow-inner"
@@ -782,7 +782,7 @@ const ParticipantView: React.FC = () => {
             ))}
             {userProfile.personalHistory.length === 0 && (
               <div className="text-center py-20 opacity-30 border-2 border-dashed border-white/5 rounded-[2.5rem] bg-black/20">
-                <p className="text-sm font-black uppercase tracking-[0.4em] font-righteous text-slate-600">NO_HISTORY_LOGS</p>
+                <p className="text-sm font-black uppercase tracking-[0.4em] font-righteous text-slate-600">NO HISTORY FOUND</p>
               </div>
             )}
           </section>
@@ -795,11 +795,11 @@ const ParticipantView: React.FC = () => {
                 <span className="text-5xl">🎤</span>
               </div>
 
-              <h3 className="text-[var(--neon-cyan)] font-black uppercase tracking-[0.3em] font-righteous mb-6">VOCAL_CALIBRATION</h3>
+              <h3 className="text-[var(--neon-cyan)] font-black uppercase tracking-[0.3em] font-righteous mb-6">VOCAL SETUP</h3>
 
               <div className="flex flex-col items-center gap-6">
                 <div className="w-full bg-black/40 border border-white/10 rounded-2xl p-6 flex flex-col items-center">
-                  <span className="text-sm font-black text-slate-500 uppercase tracking-widest font-righteous mb-2">DETECTED_RANGE</span>
+                  <span className="text-sm font-black text-slate-500 uppercase tracking-widest font-righteous mb-2">SINGER RANGE</span>
                   <span className="text-4xl font-bold text-white uppercase font-bungee tracking-tight neon-text-glow-cyan">
                     {userProfile?.vocalRange || 'UNKNOWN'}
                   </span>
@@ -810,7 +810,7 @@ const ParticipantView: React.FC = () => {
                     <div className="h-2 bg-white/5 rounded-full overflow-hidden">
                       <div className="h-full bg-[var(--neon-cyan)] animate-pulse shadow-[0_0_10px_var(--neon-cyan)]" style={{ width: `${scanProgress}%` }}></div>
                     </div>
-                    <div className="text-xs text-[var(--neon-cyan)] font-black animate-pulse font-righteous text-center tracking-[0.2em]">ANALYZING_PITCH_WAVETABLE...</div>
+                    <div className="text-xs text-[var(--neon-cyan)] font-black animate-pulse font-righteous text-center tracking-[0.2em]">CALIBRATING VOICE...</div>
                   </div>
                 ) : (
                   <button

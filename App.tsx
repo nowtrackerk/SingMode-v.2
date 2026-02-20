@@ -147,15 +147,7 @@ const App: React.FC = () => {
             </div>
           )}
 
-          <div className="flex justify-end mb-4">
-            <button
-              onClick={() => setRole('ADMIN')}
-              className="px-6 py-2 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-[var(--neon-purple)] rounded-xl text-[10px] font-bold text-slate-400 hover:text-[var(--neon-purple)] uppercase tracking-widest transition-all font-righteous flex items-center gap-2 group"
-            >
-              <span className="w-2 h-2 bg-[var(--neon-purple)] rounded-full group-hover:animate-pulse"></span>
-              ACCESS_ADMIN_PORTAL
-            </button>
-          </div>
+
 
           <div className={`grid gap-8 ${isQRCodeUser ? 'grid-cols-1 max-w-2xl mx-auto' : 'md:grid-cols-2'}`}>
             {!isQRCodeUser && (
@@ -167,7 +159,7 @@ const App: React.FC = () => {
                 <div className="relative z-10">
                   <div className="w-24 h-24 bg-black border-2 border-white/10 rounded-3xl flex items-center justify-center text-5xl mb-8 group-hover:scale-110 transition-all group-hover:border-[var(--neon-pink)] shadow-2xl">🎧</div>
                   <h2 className="text-5xl font-bold mb-4 font-bungee uppercase tracking-tight text-white group-hover:text-[var(--neon-pink)] transition-colors">DJ_CONSOLE</h2>
-                  <p className="text-sm font-medium font-righteous uppercase tracking-widest text-[var(--neon-cyan)] opacity-90 leading-relaxed">COORDINATE_ROTATION. APPROVE_THREADS. COMMAND_ATMOSPHERE.</p>
+                  <p className="text-sm font-medium font-righteous uppercase tracking-widest text-[var(--neon-cyan)] opacity-90 leading-relaxed">COORDINATE ROTATION. APPROVE REQUESTS. COMMAND ATMOSPHERE.</p>
                 </div>
               </button>
             )}
@@ -180,7 +172,7 @@ const App: React.FC = () => {
               <div className="relative z-10">
                 <div className="w-24 h-24 bg-black border-2 border-white/10 rounded-3xl flex items-center justify-center text-5xl mb-8 group-hover:scale-110 transition-all group-hover:border-[var(--neon-cyan)] shadow-2xl">🎤</div>
                 <h2 className="text-5xl font-bold mb-4 font-bungee uppercase tracking-tight text-white group-hover:text-[var(--neon-cyan)] transition-colors">SINGER_UI</h2>
-                <p className="text-sm font-medium font-righteous uppercase tracking-widest text-[var(--neon-yellow)] opacity-90 leading-relaxed">REQUEST_TRACKS. FAVORITE_VIBES. ACCESS_SONGBOOK.</p>
+                <p className="text-sm font-medium font-righteous uppercase tracking-widest text-[var(--neon-yellow)] opacity-90 leading-relaxed">REQUEST SONGS. FAVORITE VIBES. ACCESS SONGBOOK.</p>
               </div>
             </button>
           </div>
