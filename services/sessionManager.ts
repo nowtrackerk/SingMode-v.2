@@ -9,6 +9,20 @@ const PROFILE_KEY = 'kstar_active_user';
 const ACCOUNTS_KEY = 'kstar_user_accounts';
 
 let isRemoteClient = false;
+let sessionUpdatePromise: Promise<any> = Promise.resolve();
+
+/**
+ * Serializes session updates to prevent race conditions
+ */
+export const runSessionUpdate = async <T>(updateFn: (session: KaraokeSession) => Promise<T> | T): Promise<T> => {
+  const result = await (sessionUpdatePromise = sessionUpdatePromise.then(async () => {
+    const session = await getSession();
+    const result = await updateFn(session);
+    await saveSession(session);
+    return result;
+  }));
+  return result;
+};
 
 const INITIAL_SESSION: KaraokeSession = {
   id: 'current-session',
@@ -92,20 +106,29 @@ async function handleRemoteAction(action: RemoteAction) {
       await joinSession(id);
 
       // Link Device
-      const session = await getSession();
-      if (session.deviceConnections) {
-        // We try to find a device that matches the senderId (peerId)
-        // Note: action.senderId is the Peer ID
-        const devIdx = session.deviceConnections.findIndex(d => d.peerId === action.senderId);
+      await runSessionUpdate((s) => {
+        if (!s.deviceConnections) s.deviceConnections = [];
+        const devIdx = s.deviceConnections.findIndex(d => d.peerId === action.senderId);
         if (devIdx > -1) {
-          session.deviceConnections[devIdx].userId = id;
-          session.deviceConnections[devIdx].isGuest = profile?.isGuest ?? false;
+          s.deviceConnections[devIdx].userId = id;
+          s.deviceConnections[devIdx].isGuest = profile?.isGuest ?? false;
           if (action.payload.userAgent) {
-            session.deviceConnections[devIdx].userAgent = action.payload.userAgent;
+            s.deviceConnections[devIdx].userAgent = action.payload.userAgent;
           }
-          await saveSession(session);
+        } else {
+          // Device somehow missing from session state, add it now
+          s.deviceConnections.push({
+            id: `D-${Math.random().toString(36).substr(2, 4).toUpperCase()}`,
+            peerId: action.senderId,
+            connectedAt: Date.now(),
+            lastSeen: Date.now(),
+            status: 'connected',
+            userAgent: action.payload.userAgent || 'Unknown',
+            userId: id,
+            isGuest: profile?.isGuest ?? false
+          });
         }
-      }
+      });
       break;
     }
     case 'TOGGLE_STATUS':
@@ -221,46 +244,43 @@ export const initializeSync = async (role: 'DJ' | 'PARTICIPANT', room?: string) 
 };
 
 export const trackDeviceConnection = async (peerId: string) => {
-  const session = await getSession();
-  if (!session.deviceConnections) session.deviceConnections = [];
+  await runSessionUpdate((session) => {
+    if (!session.deviceConnections) session.deviceConnections = [];
+    const existingIdx = session.deviceConnections.findIndex(d => d.peerId === peerId);
 
-  const existingIdx = session.deviceConnections.findIndex(d => d.peerId === peerId);
-
-  if (existingIdx > -1) {
-    session.deviceConnections[existingIdx].status = 'connected';
-    session.deviceConnections[existingIdx].lastSeen = Date.now();
-  } else {
-    // New Device
-    session.deviceConnections.push({
-      id: `D-${Math.random().toString(36).substr(2, 4).toUpperCase()}`,
-      peerId: peerId,
-      connectedAt: Date.now(),
-      lastSeen: Date.now(),
-      status: 'connected',
-      userAgent: 'Unknown'
-    });
-  }
-  await saveSession(session);
+    if (existingIdx > -1) {
+      session.deviceConnections[existingIdx].status = 'connected';
+      session.deviceConnections[existingIdx].lastSeen = Date.now();
+    } else {
+      // New Device
+      session.deviceConnections.push({
+        id: `D-${Math.random().toString(36).substr(2, 4).toUpperCase()}`,
+        peerId: peerId,
+        connectedAt: Date.now(),
+        lastSeen: Date.now(),
+        status: 'connected',
+        userAgent: 'Unknown'
+      });
+    }
+  });
 };
 
 export const assignUserToDevice = async (deviceId: string, userId: string, isGuest = false) => {
-  const session = await getSession();
-  if (!session.deviceConnections) return;
-
-  const idx = session.deviceConnections.findIndex(d => d.id === deviceId);
-  if (idx > -1) {
-    session.deviceConnections[idx].userId = userId;
-    session.deviceConnections[idx].isGuest = isGuest;
-    await saveSession(session);
-  }
+  await runSessionUpdate((session) => {
+    if (!session.deviceConnections) return;
+    const idx = session.deviceConnections.findIndex(d => d.id === deviceId);
+    if (idx > -1) {
+      session.deviceConnections[idx].userId = userId;
+      session.deviceConnections[idx].isGuest = isGuest;
+    }
+  });
 };
 
 export const removeDevice = async (deviceId: string) => {
-  const session = await getSession();
-  if (!session.deviceConnections) return;
-
-  session.deviceConnections = session.deviceConnections.filter(d => d.id !== deviceId);
-  await saveSession(session);
+  await runSessionUpdate((session) => {
+    if (!session.deviceConnections) return;
+    session.deviceConnections = session.deviceConnections.filter(d => d.id !== deviceId);
+  });
 };
 
 export const getSession = async (): Promise<KaraokeSession> => {

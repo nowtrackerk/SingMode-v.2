@@ -185,7 +185,8 @@ class SyncService {
     conn.on('data', (data: unknown) => {
       if (data && typeof data === 'object') {
         if ('type' in data) {
-          if (this.onActionReceived) this.onActionReceived(data as RemoteAction);
+          const action = { ...(data as RemoteAction), senderId: conn.peer };
+          if (this.onActionReceived) this.onActionReceived(action);
         } else if ('participants' in data) {
           if (this.onStateReceived) this.onStateReceived(data as KaraokeSession);
         }
