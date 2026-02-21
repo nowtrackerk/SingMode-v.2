@@ -178,6 +178,7 @@ export interface ActiveSession {
   hostName: string;
   hostUid?: string; // Firebase Auth UID of the host
   venueName?: string;
+  appVersion?: string; // e.g. 'singmode-v2' — used to filter sessions by app
   isActive: boolean;
   startedAt: number;
   lastHeartbeat: number;

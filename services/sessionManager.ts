@@ -1541,6 +1541,7 @@ export const registerSession = async (metadata: Omit<ActiveSession, 'participant
       id: metadata.id,
       hostName: metadata.hostName || "SingMode DJ",
       hostUid: metadata.hostUid || "anonymous-host",
+      appVersion: 'singmode-v2',
       isActive: metadata.isActive ?? true,
       startedAt: metadata.startedAt || Date.now(),
       lastHeartbeat: Date.now(),
@@ -1658,8 +1659,10 @@ export const subscribeToSessions = (callback: (sessions: ActiveSession[]) => voi
     snapshot.forEach(doc => {
       const data = doc.data() as ActiveSession;
       const isFresh = data.lastHeartbeat && (now - data.lastHeartbeat < heartbeatLimit);
+      // Only show sessions created by Singmode v.2
+      const isV2Session = data.appVersion === 'singmode-v2';
 
-      if (isFresh) {
+      if (isFresh && isV2Session) {
         // Deduplicate by hostUid or composite key
         const key = data.hostUid || `${data.hostName}-${data.venueName}`;
         const existing = sessionMap.get(key);
