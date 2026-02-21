@@ -100,6 +100,9 @@ async function handleRemoteAction(action: RemoteAction) {
         if (devIdx > -1) {
           session.deviceConnections[devIdx].userId = id;
           session.deviceConnections[devIdx].isGuest = profile?.isGuest ?? false;
+          if (action.payload.userAgent) {
+            session.deviceConnections[devIdx].userAgent = action.payload.userAgent;
+          }
           await saveSession(session);
         }
       }
@@ -748,9 +751,10 @@ export const joinSession = async (profileId: string): Promise<Participant> => {
       type: 'JOIN_SESSION',
       payload: {
         id: profileId,
-        profile: existingProfile
+        profile: existingProfile,
+        userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'Unknown'
       },
-      senderId: profileId
+      senderId: syncService.getMyPeerId() || profileId
     });
     return {
       id: profileId,

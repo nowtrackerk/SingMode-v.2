@@ -250,6 +250,10 @@ class SyncService {
     return this.hostId;
   }
 
+  getMyPeerId(): string | null {
+    return this.peer?.id || null;
+  }
+
   destroy() {
     if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
     this.connections.forEach(c => c.close());

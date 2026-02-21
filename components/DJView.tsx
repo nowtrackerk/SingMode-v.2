@@ -2581,11 +2581,19 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
                           {assignedUser ? (isGuest ? '👽' : '👤') : '📱'}
                         </div>
                         <div>
-                          <h3 className="text-xl font-bold text-white font-righteous tracking-wide">
+                          <h3 className="text-xl font-bold text-white font-righteous tracking-wide flex items-center gap-3">
                             {device.id}
+                            {isGuest && (
+                              <span className="px-2 py-0.5 rounded bg-rose-500 text-[8px] font-black text-white">GUEST</span>
+                            )}
                           </h3>
-                          <div className="text-xs font-mono text-slate-500 mt-1 truncate max-w-[150px]" title={device.peerId}>
-                            {device.peerId}
+                          <div className="text-xs font-mono text-slate-500 mt-1 flex flex-col gap-1">
+                            <div className="truncate max-w-[150px]" title={device.peerId}>{device.peerId}</div>
+                            {device.userAgent && (
+                              <div className="text-[10px] text-[var(--neon-cyan)]/60 font-black uppercase flex items-center gap-1">
+                                {device.userAgent.toLowerCase().includes('mobile') ? '📱 MOBILE' : '💻 DESKTOP'}
+                              </div>
+                            )}
                           </div>
                           <div className={`mt-2 text-xs font-bold uppercase tracking-widest px-2 py-0.5 rounded inline-block ${isConnected ? 'bg-[var(--neon-green)]/10 text-[var(--neon-green)]' : 'bg-rose-500/10 text-rose-500'
                             }`}>
