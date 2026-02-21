@@ -59,6 +59,10 @@ const ParticipantView: React.FC = () => {
   const roomId = syncService.getRoomId();
   const roomJoinUrl = getNetworkUrl() + (roomId ? `?room=${roomId}` : '');
 
+  // Detect if user arrived via QR / room link — lock them into ParticipantView
+  const isJoinedViaQR = !!(new URLSearchParams(window.location.search).get('room') ||
+    new URLSearchParams(window.location.search).get('userId'));
+
   const [confirmState, setConfirmState] = useState<{
     isOpen: boolean;
     message: string;
@@ -834,13 +838,15 @@ const ParticipantView: React.FC = () => {
 
 
       <footer className="fixed bottom-6 left-6 right-6 z-40 flex gap-4">
-        <button
-          onClick={() => setShowSessionScanner(true)}
-          className="flex-1 bg-[#101015] border-2 border-[var(--neon-green)]/30 p-4 rounded-[2rem] flex items-center justify-between px-8 shadow-2xl hover:bg-[var(--neon-green)] hover:text-black hover:border-[var(--neon-green)] transition-all group"
-        >
-          <span className="text-sm font-black uppercase tracking-[0.3em] font-righteous group-hover:text-black text-[var(--neon-green)]">SCAN_NODES</span>
-          <span className="text-2xl group-hover:scale-125 transition-transform">📡</span>
-        </button>
+        {!isJoinedViaQR && (
+          <button
+            onClick={() => setShowSessionScanner(true)}
+            className="flex-1 bg-[#101015] border-2 border-[var(--neon-green)]/30 p-4 rounded-[2rem] flex items-center justify-between px-8 shadow-2xl hover:bg-[var(--neon-green)] hover:text-black hover:border-[var(--neon-green)] transition-all group"
+          >
+            <span className="text-sm font-black uppercase tracking-[0.3em] font-righteous group-hover:text-black text-[var(--neon-green)]">CONNECTIONS</span>
+            <span className="text-2xl group-hover:scale-125 transition-transform">📡</span>
+          </button>
+        )}
 
         <button
           onClick={() => setShowQrModal(true)}
@@ -859,12 +865,15 @@ const ParticipantView: React.FC = () => {
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[var(--neon-green)] via-[var(--neon-cyan)] to-[var(--neon-blue)] animate-gradient-x"></div>
             <button onClick={() => setShowSessionScanner(false)} className="absolute top-6 right-6 text-slate-700 hover:text-white text-3xl transition-colors z-50">✕</button>
 
-            <h3 className="text-4xl md:text-5xl font-black text-white uppercase tracking-tight mb-8 font-bungee neon-glow-green mt-8">ACTIVE_SIGNALS</h3>
+            <h3 className="text-4xl md:text-5xl font-black text-white uppercase tracking-tight mb-8 font-bungee neon-glow-green mt-8">CONNECTIONS</h3>
 
-            <SessionList onJoin={(id) => {
-              // Fix: Use search to avoid 404 on GH Pages subdirectories
-              window.location.search = `?room=${id}`;
-            }} />
+            <SessionList
+              onJoin={(id) => {
+                // Fix: Use search to avoid 404 on GH Pages subdirectories
+                window.location.search = `?room=${id}`;
+              }}
+              filterHostName={session?.hostName}
+            />
           </div>
         </div>
       )}

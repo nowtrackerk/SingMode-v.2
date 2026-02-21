@@ -5,19 +5,24 @@ import { getNetworkUrl } from '../services/networkUtils';
 
 interface SessionListProps {
     onJoin: (sessionId: string) => void;
+    filterHostName?: string; // If provided, only show sessions by this host
 }
 
-const SessionList: React.FC<SessionListProps> = ({ onJoin }) => {
-    const [sessions, setSessions] = useState<ActiveSession[]>([]);
+const SessionList: React.FC<SessionListProps> = ({ onJoin, filterHostName }) => {
+    const [allSessions, setAllSessions] = useState<ActiveSession[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const unsubscribe = subscribeToSessions((updatedSessions) => {
-            setSessions(updatedSessions);
+            setAllSessions(updatedSessions);
             setLoading(false);
         });
         return () => unsubscribe();
     }, []);
+
+    const sessions = filterHostName
+        ? allSessions.filter(s => s.hostName?.toLowerCase() === filterHostName.toLowerCase())
+        : allSessions;
 
     if (loading) {
         return (

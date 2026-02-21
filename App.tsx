@@ -33,12 +33,15 @@ const App: React.FC = () => {
       }
 
       try {
-        if (view === 'DJ') {
-          setRole('DJ');
-          // DJs now explicitly open sessions in the DJView
-        } else if (view === 'PARTICIPANT' || view === 'STAGE' || room || sincUserId) {
+        // If room param is present, always force PARTICIPANT — never allow DJ via QR
+        if (room || sincUserId) {
           setRole('PARTICIPANT');
           await initializeSync('PARTICIPANT', room || undefined);
+        } else if (view === 'DJ') {
+          setRole('DJ');
+        } else if (view === 'PARTICIPANT' || view === 'STAGE') {
+          setRole('PARTICIPANT');
+          await initializeSync('PARTICIPANT', undefined);
         } else {
           setRole('SELECT');
         }
