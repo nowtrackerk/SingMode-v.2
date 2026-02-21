@@ -457,47 +457,6 @@ const ParticipantView: React.FC = () => {
             </button>
           </div>
 
-          <div className="flex flex-col items-center gap-4 w-full max-w-xs mx-auto mt-8">
-            <div className="bg-black/40 border border-white/5 rounded-2xl p-4 w-full group hover:border-[var(--neon-cyan)] transition-all">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-xs font-black text-slate-600 uppercase tracking-widest font-righteous">VOICE TYPE</span>
-                <span className="text-base font-bold text-[var(--neon-cyan)] uppercase font-righteous tracking-wider">{userProfile?.vocalRange || 'UNKNOWN'}</span>
-              </div>
-              {isScanning ? (
-                <div className="space-y-2 py-1">
-                  <div className="h-1 bg-white/5 rounded-full overflow-hidden">
-                    <div className="h-full bg-[var(--neon-cyan)] animate-pulse shadow-[0_0_10px_var(--neon-cyan)]" style={{ width: `${scanProgress}%` }}></div>
-                  </div>
-                  <div className="text-xs text-[var(--neon-cyan)] font-black animate-pulse font-righteous text-center">ANALYZING_PITCH_WAVETABLE...</div>
-                </div>
-              ) : (
-                <button
-                  onClick={async () => {
-                    setIsScanning(true);
-                    let progress = 0;
-                    const interval = setInterval(() => {
-                      progress += 5;
-                      setScanProgress(progress);
-                      if (progress >= 100) {
-                        clearInterval(interval);
-                        setTimeout(async () => {
-                          const ranges: ('Soprano' | 'Alto' | 'Tenor' | 'Baritone' | 'Bass')[] = ['Soprano', 'Alto', 'Tenor', 'Baritone', 'Bass'];
-                          const randomRange = ranges[Math.floor(Math.random() * ranges.length)];
-                          if (userProfile) await updateVocalRange(userProfile.id, randomRange);
-                          setIsScanning(false);
-                          setScanProgress(0);
-                          await refresh();
-                        }, 500);
-                      }
-                    }, 100);
-                  }}
-                  className="w-full text-center py-2 text-xs font-black uppercase tracking-[0.2em] text-[var(--neon-cyan)] hover:text-white transition-colors font-righteous"
-                >
-                  [ TAP TO CALIBRATE ]
-                </button>
-              )}
-            </div>
-          </div>
         </div>
       </header>
 

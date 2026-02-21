@@ -5,7 +5,7 @@ import ParticipantView from './components/ParticipantView';
 import { getSession, initializeSync, cleanupExpiredGuestAccounts } from './services/sessionManager';
 import { syncService } from './services/syncService';
 import { SingModeLogo } from './components/common/SingModeLogo';
-import { SyncBadge } from './components/common/SyncBadge';
+import { SingModeLogo } from './components/common/SingModeLogo';
 
 import FeaturesView from './components/FeaturesView';
 import AdminPortal from './components/AdminPortal';
@@ -253,7 +253,6 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#050510] text-white selection:bg-[var(--neon-pink)] selection:text-white">
-      <SyncBadge role={role} />
       <nav className="fixed top-0 inset-x-0 z-[100] backdrop-blur-xl bg-black/80 border-b border-white/5 transition-all duration-300">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <div onClick={() => setRole('SELECT')} className="cursor-pointer group flex items-center gap-4">
