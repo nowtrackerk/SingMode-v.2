@@ -6,7 +6,8 @@ import { Participant, KaraokeSession, ParticipantStatus, RequestType, RequestSta
 import {
   getSession, joinSession, updateParticipantStatus, addRequest, deleteRequest,
   updateRequest, getUserProfile, toggleFavorite, saveUserProfile, registerUser,
-  loginUser, logoutUser, updateParticipantMic, reorderMyRequests, updateVocalRange, loginUserById
+  loginUser, logoutUser, updateParticipantMic, reorderMyRequests, updateVocalRange, loginUserById,
+  getActiveSessions
 } from '../services/sessionManager';
 import SongRequestForm from './SongRequestForm';
 import { syncService } from '../services/syncService';
@@ -55,6 +56,7 @@ const ParticipantView: React.FC = () => {
   const [scanProgress, setScanProgress] = useState(0);
   const [showSessionScanner, setShowSessionScanner] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'connecting'>('connecting');
+  const [djHostName, setDjHostName] = useState<string | undefined>(undefined);
 
   const roomId = syncService.getRoomId();
   const roomJoinUrl = getNetworkUrl() + (roomId ? `?room=${roomId}` : '');
@@ -62,6 +64,15 @@ const ParticipantView: React.FC = () => {
   // Detect if user arrived via QR / room link — lock them into ParticipantView
   const isJoinedViaQR = !!(new URLSearchParams(window.location.search).get('room') ||
     new URLSearchParams(window.location.search).get('userId'));
+
+  // Fetch the DJ's hostName from the active session matching our roomId
+  useEffect(() => {
+    if (!roomId) return;
+    getActiveSessions().then(sessions => {
+      const match = sessions.find(s => s.id === roomId);
+      if (match) setDjHostName(match.hostName);
+    });
+  }, [roomId]);
 
   const [confirmState, setConfirmState] = useState<{
     isOpen: boolean;
@@ -869,10 +880,9 @@ const ParticipantView: React.FC = () => {
 
             <SessionList
               onJoin={(id) => {
-                // Fix: Use search to avoid 404 on GH Pages subdirectories
                 window.location.search = `?room=${id}`;
               }}
-              filterHostName={session?.hostName}
+              filterHostName={djHostName}
             />
           </div>
         </div>
