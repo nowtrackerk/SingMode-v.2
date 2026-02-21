@@ -35,7 +35,7 @@ const App: React.FC = () => {
         if (view === 'DJ') {
           setRole('DJ');
           await initializeSync('DJ', room || undefined);
-        } else if (view === 'PARTICIPANT' || room) {
+        } else if (view === 'PARTICIPANT' || view === 'STAGE' || room) {
           setRole('PARTICIPANT');
           await initializeSync('PARTICIPANT', room || undefined);
         } else {

@@ -862,7 +862,8 @@ const ParticipantView: React.FC = () => {
             <h3 className="text-4xl md:text-5xl font-black text-white uppercase tracking-tight mb-8 font-bungee neon-glow-green mt-8">ACTIVE_SIGNALS</h3>
 
             <SessionList onJoin={(id) => {
-              window.location.href = `/?room=${id}`;
+              // Fix: Use search to avoid 404 on GH Pages subdirectories
+              window.location.search = `?room=${id}`;
             }} />
           </div>
         </div>
