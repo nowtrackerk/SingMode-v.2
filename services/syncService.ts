@@ -34,6 +34,9 @@ class SyncService {
 
   async initialize(role: 'DJ' | 'PARTICIPANT', room?: string): Promise<string> {
     this.isHost = role === 'DJ';
+    if (!this.isHost && room) {
+      this.hostId = room;
+    }
 
     if (this.peer) {
       this.destroy();
