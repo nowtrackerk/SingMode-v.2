@@ -2367,45 +2367,69 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
               </div>
 
               <div className="flex flex-col items-center gap-4">
-                {/* QR: Manual IP input */}
-                <p className="text-[var(--neon-yellow)] font-black uppercase tracking-[0.2em] text-[10px] font-righteous self-start">NETWORK IP — SCAN TO JOIN</p>
-                <div className="bg-white p-4 rounded-2xl w-full max-w-sm mx-auto shadow-[0_0_40px_rgba(255,255,255,0.1)] hover:scale-105 transition-transform">
-                  <QRCode
-                    value={(() => {
-                      const ip = networkIpInput.trim();
-                      if (!ip) return 'http://enter-ip-below';
-                      const base = ip.startsWith('http') ? ip : `http://${ip}:5173/SingMode-v.2/`;
-                      if (qrTargetUser) return `${base}?userId=${qrTargetUser.id}&room=${roomId || ''}`;
-                      return `${base}?room=${roomId || ''}`;
-                    })()}
-                    size={300}
-                    style={{ height: 'auto', maxWidth: '100%', width: '100%' }}
-                    viewBox="0 0 256 256"
-                  />
-                </div>
-                <div className="w-full p-3 bg-black/60 border border-white/10 rounded-xl">
-                  <p className="text-[10px] font-mono text-[var(--neon-cyan)] break-all text-center">
-                    {(() => {
-                      const ip = networkIpInput.trim();
-                      if (!ip) return 'Enter IP below to generate URL';
-                      const base = ip.startsWith('http') ? ip : `http://${ip}:5173/SingMode-v.2/`;
-                      return qrTargetUser ? `${base}?userId=${qrTargetUser.id}&room=${roomId || ''}` : `${base}?room=${roomId || ''}`;
-                    })()}
-                  </p>
-                </div>
-                <input
-                  type="text"
-                  value={networkIpInput}
-                  onChange={(e) => setNetworkIpInput(e.target.value)}
-                  placeholder="e.g. 192.168.0.160"
-                  className="w-full bg-black border-2 border-[var(--neon-yellow)]/40 focus:border-[var(--neon-yellow)] rounded-xl px-4 py-3 text-white font-mono text-sm outline-none transition-all placeholder:text-slate-600"
-                />
-                <button
-                  onClick={() => { setNetworkIp(networkIpInput.trim()); }}
-                  className="w-full py-3 bg-[var(--neon-yellow)] text-black rounded-xl font-black text-xs uppercase tracking-widest hover:bg-white transition-all font-righteous"
-                >
-                  SAVE & USE THIS IP
-                </button>
+                {/* Smart QR: auto URL on GitHub Pages, manual IP on localhost */}
+                {(() => {
+                  const autoUrl = getNetworkUrl();
+                  const isLocalhost = autoUrl.includes('localhost') || autoUrl.includes('127.0.0.1');
+
+                  // Build the final QR value
+                  const getQrValue = (base: string) => {
+                    const cleanBase = base.replace(/\/$/, '') + '/';
+                    if (qrTargetUser) return `${cleanBase}?userId=${qrTargetUser.id}&room=${roomId || ''}`;
+                    return `${cleanBase}?room=${roomId || ''}`;
+                  };
+
+                  // On GitHub Pages / network: use auto URL directly
+                  if (!isLocalhost) {
+                    const qrValue = getQrValue(autoUrl);
+                    return (
+                      <>
+                        <p className="text-[var(--neon-green)] font-black uppercase tracking-[0.2em] text-[10px] font-righteous self-start">✓ LIVE URL — SCAN TO JOIN</p>
+                        <div className="bg-white p-4 rounded-2xl w-full max-w-sm mx-auto shadow-[0_0_40px_rgba(255,255,255,0.1)] hover:scale-105 transition-transform">
+                          <QRCode value={qrValue} size={300} style={{ height: 'auto', maxWidth: '100%', width: '100%' }} viewBox="0 0 256 256" />
+                        </div>
+                        <div className="w-full p-3 bg-[var(--neon-green)]/10 border border-[var(--neon-green)]/30 rounded-xl">
+                          <p className="text-[10px] font-mono text-[var(--neon-green)] break-all text-center">{qrValue}</p>
+                        </div>
+                      </>
+                    );
+                  }
+
+                  // On localhost: show manual IP input
+                  const manualBase = networkIpInput.trim()
+                    ? (networkIpInput.trim().startsWith('http') ? networkIpInput.trim() : `http://${networkIpInput.trim()}:5173/SingMode-v.2/`)
+                    : null;
+                  const qrValue = manualBase ? getQrValue(manualBase) : 'http://enter-your-ip-below';
+
+                  return (
+                    <>
+                      <div className="w-full p-3 bg-rose-500/20 border border-rose-500/40 rounded-xl">
+                        <p className="text-rose-400 text-[10px] font-black uppercase tracking-widest text-center">⚠️ LOCALHOST — phones can't connect via this URL</p>
+                        <p className="text-slate-500 text-[10px] text-center mt-1 font-mono">Deploy to GitHub Pages for automatic public URLs, or enter your LAN IP below</p>
+                      </div>
+                      <p className="text-[var(--neon-yellow)] font-black uppercase tracking-[0.2em] text-[10px] font-righteous self-start">MANUAL NETWORK IP</p>
+                      <div className="bg-white p-4 rounded-2xl w-full max-w-sm mx-auto shadow-[0_0_40px_rgba(255,255,255,0.1)] hover:scale-105 transition-transform">
+                        <QRCode value={qrValue} size={300} style={{ height: 'auto', maxWidth: '100%', width: '100%' }} viewBox="0 0 256 256" />
+                      </div>
+                      <div className="w-full p-3 bg-black/60 border border-white/10 rounded-xl">
+                        <p className="text-[10px] font-mono text-[var(--neon-cyan)] break-all text-center">{manualBase ? qrValue : 'Enter IP below to generate URL'}</p>
+                      </div>
+                      <input
+                        type="text"
+                        value={networkIpInput}
+                        onChange={(e) => setNetworkIpInput(e.target.value)}
+                        placeholder="e.g. 192.168.0.160"
+                        className="w-full bg-black border-2 border-[var(--neon-yellow)]/40 focus:border-[var(--neon-yellow)] rounded-xl px-4 py-3 text-white font-mono text-sm outline-none transition-all placeholder:text-slate-600"
+                      />
+                      <button
+                        onClick={() => { setNetworkIp(networkIpInput.trim()); }}
+                        className="w-full py-3 bg-[var(--neon-yellow)] text-black rounded-xl font-black text-xs uppercase tracking-widest hover:bg-white transition-all font-righteous"
+                      >
+                        SAVE & USE THIS IP
+                      </button>
+                    </>
+                  );
+                })()}
               </div>
 
               <div className="mt-6 p-3 bg-white/5 rounded-2xl border border-white/5 text-center">
