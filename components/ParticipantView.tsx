@@ -14,6 +14,7 @@ import { syncService } from '../services/syncService';
 import { getNetworkUrl } from '../services/networkUtils';
 import SessionList from './SessionList';
 import VocalFxPanel from './VocalFxPanel';
+import SingModeLogo from './common/SingModeLogo';
 
 
 type Tab = 'ROTATION' | 'REQUESTS' | 'FAVORITES' | 'HISTORY' | 'VOCALS';
@@ -448,7 +449,49 @@ const ParticipantView: React.FC = () => {
     );
   }
 
-  if (!session || !participant) return null;
+  if (!session || !participant) {
+    return (
+      <div className="min-h-screen bg-[#050510] flex flex-col items-center justify-center p-8 space-y-12">
+        <div className="scale-125 mb-8">
+          <SingModeLogo />
+        </div>
+
+        <div className="relative">
+          {/* Outer glow ring */}
+          <div className="absolute -inset-4 bg-[var(--neon-cyan)]/10 rounded-full blur-xl animate-pulse"></div>
+
+          {/* Animated Spinner Stack */}
+          <div className="relative w-32 h-32">
+            <div className="absolute inset-0 border-4 border-[var(--neon-cyan)]/10 border-t-[var(--neon-cyan)] rounded-full animate-spin shadow-[0_0_20px_rgba(0,229,255,0.4)]"></div>
+            <div className="absolute inset-4 border-4 border-[var(--neon-pink)]/10 border-b-[var(--neon-pink)] rounded-full animate-spin shadow-[0_0_20px_rgba(255,42,109,0.4)]" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }}></div>
+            <div className="absolute inset-8 border-4 border-white/5 border-l-white/40 rounded-full animate-spin" style={{ animationDuration: '3s' }}></div>
+          </div>
+        </div>
+
+        <div className="text-center space-y-4 max-w-xs transition-all">
+          <h2 className="text-3xl font-black text-white uppercase tracking-[0.4em] font-bungee animate-pulse drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]">
+            Connecting
+          </h2>
+          <div className="h-1 w-24 bg-gradient-to-r from-transparent via-[var(--neon-cyan)] to-transparent mx-auto opacity-50"></div>
+          <p className="text-slate-400 font-righteous tracking-[0.2em] text-xs uppercase leading-relaxed">
+            {syncService.getRoomId() ? (
+              <>Syncing with Room<br /><span className="text-[var(--neon-cyan)] font-bold">{syncService.getRoomId()}</span></>
+            ) : (
+              "Waiting for session data..."
+            )}
+          </p>
+        </div>
+
+        {/* Status Indicator */}
+        <div className="fixed bottom-12 left-0 right-0 flex justify-center">
+          <div className="px-4 py-2 bg-black/40 backdrop-blur-md border border-white/5 rounded-full flex items-center space-x-3">
+            <div className={`w-2 h-2 rounded-full animate-ping ${connectionStatus === 'connected' ? 'bg-green-500' : 'bg-amber-500'}`}></div>
+            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Network: {connectionStatus}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const myRequests = session.requests.filter(r => r.participantId === participant.id);
 
