@@ -14,7 +14,7 @@ import { syncService } from '../services/syncService';
 import { getNetworkUrl } from '../services/networkUtils';
 import SessionList from './SessionList';
 import VocalFxPanel from './VocalFxPanel';
-import SingModeLogo from './common/SingModeLogo';
+import { SingModeLogo } from './common/SingModeLogo';
 
 
 type Tab = 'ROTATION' | 'REQUESTS' | 'FAVORITES' | 'HISTORY' | 'VOCALS';
