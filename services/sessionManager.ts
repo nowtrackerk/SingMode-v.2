@@ -244,6 +244,29 @@ export const initializeSync = async (role: 'DJ' | 'PARTICIPANT', room?: string) 
         }
       }
     };
+
+    // Host Action Buffer Listener: Handle actions sent via Firestore when PeerJS is down
+    const actionsRef = collection(db, "sessions", peerId, "pending_actions");
+    onSnapshot(actionsRef, (snapshot) => {
+      snapshot.docChanges().forEach(async (change) => {
+        if (change.type === "added") {
+          const action = change.doc.data() as RemoteAction;
+          console.log("[SessionManager] Received buffered action from Firestore:", action.type);
+          await handleRemoteAction(action);
+          // Delete to clear buffer
+          await deleteDoc(change.doc.ref);
+        }
+      });
+    });
+  }
+
+  // Participants: Setup direct Firestore state subscription as a robust fallback
+  if (isRemoteClient && room) {
+    console.log("[Sync] Initializing robust Firestore fallback sync for room:", room);
+    subscribeToSession(room, (newState) => {
+      console.log("[Sync] Received state update via Firestore fallback");
+      syncService.applyIncomingState(newState);
+    });
   }
 };
 
@@ -287,7 +310,13 @@ export const removeDevice = async (deviceId: string) => {
   });
 };
 
-export const getSession = async (): Promise<KaraokeSession> => {
+export const getSession = async (sessionId?: string): Promise<KaraokeSession> => {
+  // If we have a session ID and we are the host, prioritize the cloud state (for refreshes)
+  if (!isRemoteClient && sessionId) {
+    const cloudSess = await getSessionById(sessionId);
+    if (cloudSess) return cloudSess;
+  }
+
   const session = await storage.get(STORAGE_KEY) || { ...INITIAL_SESSION };
   if (!session.history) session.history = [];
   if (!session.messages) session.messages = [];
@@ -306,6 +335,55 @@ export const getSession = async (): Promise<KaraokeSession> => {
 export const saveSession = async (session: KaraokeSession) => {
   await storage.set(STORAGE_KEY, session);
   syncService.broadcastState(session);
+
+  // If we are the DJ/Host, also persist to Firestore for participants joining later
+  // or as a fallback for connection drops
+  if (!isRemoteClient && session.id) {
+    try {
+      const sessionDoc = doc(db, "sessions", session.id);
+      await updateDoc(sessionDoc, {
+        fullState: JSON.stringify(session),
+        lastHeartbeat: Date.now(),
+        participantsCount: session.participants.length
+      });
+    } catch (e) {
+      console.error("[SessionManager] Error persisting full state to Firestore:", e);
+    }
+  }
+};
+
+export const getSessionById = async (sessionId: string): Promise<KaraokeSession | null> => {
+  try {
+    const sessionDoc = doc(db, "sessions", sessionId);
+    const snapshot = await getDoc(sessionDoc);
+    if (snapshot.exists()) {
+      const data = snapshot.data();
+      if (data.fullState) {
+        return JSON.parse(data.fullState) as KaraokeSession;
+      }
+    }
+    return null;
+  } catch (e) {
+    console.error(`[SessionManager] Error fetching session ${sessionId}:`, e);
+    return null;
+  }
+};
+
+export const subscribeToSession = (sessionId: string, callback: (session: KaraokeSession) => void) => {
+  const sessionDoc = doc(db, "sessions", sessionId);
+  return onSnapshot(sessionDoc, (snapshot) => {
+    if (snapshot.exists()) {
+      const data = snapshot.data();
+      if (data.fullState) {
+        try {
+          const session = JSON.parse(data.fullState) as KaraokeSession;
+          callback(session);
+        } catch (e) {
+          console.error("[SessionManager] Error parsing session state from Firestore:", e);
+        }
+      }
+    }
+  });
 };
 
 export const addSessionLog = async (message: string, type: 'info' | 'warn' | 'error' = 'info') => {

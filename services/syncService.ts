@@ -1,5 +1,7 @@
 import { Peer, DataConnection } from 'peerjs';
 import { KaraokeSession, RemoteAction } from '../types';
+import { db } from './firebaseConfig';
+import { collection, addDoc } from "firebase/firestore";
 
 class SyncService {
   private peer: Peer | null = null;
@@ -20,6 +22,30 @@ class SyncService {
   // New Event for Device Tracking
   public onDeviceConnected: ((peerId: string) => void) | null = null;
   public onDeviceDisconnected: ((peerId: string) => void) | null = null;
+
+  constructor() {
+    this.loadQueue();
+  }
+
+  private loadQueue() {
+    try {
+      const saved = localStorage.getItem('singmode_pending_actions');
+      if (saved) {
+        this.actionQueue = JSON.parse(saved);
+        console.log(`[Sync] Loaded ${this.actionQueue.length} pending actions from storage.`);
+      }
+    } catch (e) {
+      console.warn('[Sync] Failed to load pending actions:', e);
+    }
+  }
+
+  private persistQueue() {
+    try {
+      localStorage.setItem('singmode_pending_actions', JSON.stringify(this.actionQueue));
+    } catch (e) {
+      console.warn('[Sync] Failed to persist pending actions:', e);
+    }
+  }
 
   private async getPublicIP(): Promise<string> {
     try {
@@ -185,6 +211,7 @@ class SyncService {
           conn.send(action);
         });
         this.actionQueue = [];
+        this.persistQueue();
       }
 
       if (this.onConnectionStatus) this.onConnectionStatus('connected');
@@ -202,7 +229,7 @@ class SyncService {
           const action = { ...(data as RemoteAction), senderId: conn.peer };
           if (this.onActionReceived) this.onActionReceived(action);
         } else if ('participants' in data) {
-          if (this.onStateReceived) this.onStateReceived(data as KaraokeSession);
+          this.applyIncomingState(data as KaraokeSession);
         }
       }
     });
@@ -243,8 +270,8 @@ class SyncService {
     });
   }
 
-  sendAction(action: RemoteAction) {
-    if (this.isHost || !this.peer) return;
+  async sendAction(action: RemoteAction) {
+    if (this.isHost) return;
 
     // Check if we have any open connection to host
     let sent = false;
@@ -256,8 +283,31 @@ class SyncService {
     });
 
     if (!sent) {
-      console.log('[Sync] No connection to host. Queuing action:', action.type);
-      this.actionQueue.push(action);
+      console.log('[Sync] No connection to host. Queuing action locally and buffering to Firestore:', action.type);
+
+      // Only keep in memory queue and perform buffering if not already queued
+      // (Basic deduplication for rapid retries/refresh loops)
+      const alreadyQueued = this.actionQueue.some(q => JSON.stringify(q.payload) === JSON.stringify(action.payload) && q.type === action.type);
+
+      if (!alreadyQueued) {
+        this.actionQueue.push(action);
+        this.persistQueue();
+
+        // Robustness Upgrade: If we have a roomId, buffer the action to Firestore
+        // This ensures the DJ receives it even if PeerJS signaling fails and we are using the fallback sync
+        if (this.hostId) {
+          try {
+            const bufferRef = collection(db, "sessions", this.hostId, "pending_actions");
+            await addDoc(bufferRef, {
+              ...action,
+              bufferedAt: Date.now()
+            });
+            console.log(`[Sync] Action ${action.type} buffered successfully to Firestore.`);
+          } catch (e) {
+            console.error('[Sync] Failed to buffer action to Firestore:', e);
+          }
+        }
+      }
     }
   }
 
@@ -267,6 +317,34 @@ class SyncService {
 
   getMyPeerId(): string | null {
     return this.peer?.id || null;
+  }
+
+  applyIncomingState(state: KaraokeSession) {
+    if (!this.isHost && this.actionQueue.length > 0) {
+      const initialLen = this.actionQueue.length;
+      this.actionQueue = this.actionQueue.filter(q => {
+        if (q.type === 'ADD_REQUEST') {
+          const payload = q.payload as any;
+          // If this song/artist for this participant is already in session, it reached the host
+          return !state.requests.some(r =>
+            r.participantId === payload.participantId &&
+            r.songName === payload.songName &&
+            r.artist === payload.artist
+          );
+        }
+        return true;
+      });
+      if (this.actionQueue.length !== initialLen) {
+        console.log(`[Sync] Self-cleaned ${initialLen - this.actionQueue.length} processed actions from queue.`);
+        this.persistQueue();
+      }
+    }
+
+    if (this.onStateReceived) this.onStateReceived(state);
+  }
+
+  getPendingActions(): RemoteAction[] {
+    return this.actionQueue;
   }
 
   destroy() {

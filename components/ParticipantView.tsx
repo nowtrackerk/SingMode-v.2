@@ -7,7 +7,7 @@ import {
   getSession, joinSession, updateParticipantStatus, addRequest, deleteRequest,
   updateRequest, getUserProfile, toggleFavorite, saveUserProfile, registerUser,
   loginUser, logoutUser, updateParticipantMic, reorderMyRequests, updateVocalRange, loginUserById,
-  getActiveSessions
+  getActiveSessions, initializeSync
 } from '../services/sessionManager';
 import SongRequestForm from './SongRequestForm';
 import { syncService } from '../services/syncService';
@@ -57,6 +57,7 @@ const ParticipantView: React.FC = () => {
   const [showSessionScanner, setShowSessionScanner] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'connecting'>('connecting');
   const [djHostName, setDjHostName] = useState<string | undefined>(undefined);
+  const [pendingActions, setPendingActions] = useState<RemoteAction[]>([]);
 
   const roomId = syncService.getRoomId();
   const roomJoinUrl = getNetworkUrl() + (roomId ? `?room=${roomId}` : '');
@@ -109,16 +110,19 @@ const ParticipantView: React.FC = () => {
         }
       }
 
+      const urlRoom = new URLSearchParams(window.location.search).get('room');
+      const currentRoom = roomId || urlRoom;
+
       const profile = await getUserProfile();
       if (profile) {
         setUserProfile(profile);
-        const sess = await getSession();
+        const sess = await getSession(currentRoom || undefined);
         setSession(sess);
         const found = sess.participants.find(p => p.id === profile.id);
         if (found) {
           setParticipant(found);
         } else {
-          console.log(`[Participant] Auto-joining session ${roomId} for profile ${profile.id}`);
+          console.log(`[Participant] Auto-joining session ${currentRoom} for profile ${profile.id}`);
           try {
             const newPart = await joinSession(profile.id);
             setParticipant(newPart);
@@ -127,11 +131,19 @@ const ParticipantView: React.FC = () => {
           }
         }
       } else {
-        const sess = await getSession();
+        const sess = await getSession(currentRoom || undefined);
         setSession(sess);
       }
     };
     init();
+
+    const urlRoom = new URLSearchParams(window.location.search).get('room');
+    const effectiveRoomId = roomId || urlRoom;
+
+    if (effectiveRoomId) {
+      console.log(`[Participant] Initializing sync for room: ${effectiveRoomId}`);
+      initializeSync('PARTICIPANT', effectiveRoomId);
+    }
 
     syncService.onConnectionStatus = (status) => {
       setConnectionStatus(status);
@@ -152,14 +164,14 @@ const ParticipantView: React.FC = () => {
           picture: payload.picture,
           googleId: payload.sub
         };
-
+  
         const result = await registerUser({
           name: googleProfile.name,
           email: googleProfile.email,
           picture: googleProfile.picture,
           googleId: googleProfile.googleId
         }, true);
-
+  
         if (result.success && result.profile) {
           const newPart = await joinSession(result.profile.id);
           setParticipant(newPart);
@@ -170,13 +182,13 @@ const ParticipantView: React.FC = () => {
         setAuthError('Google Sign-in failed. Please try again.');
       }
     };
-
+  
     if ((window as any).google) {
       (window as any).google.accounts.id.initialize({
         client_id: 'YOUR_GOOGLE_CLIENT_ID', // Requires valid Client ID
         callback: handleGoogleCallback,
       });
-
+  
       // Render button if in login/unauthenticated state
       const buttonDiv = document.getElementById('google-signin-btn');
       if (buttonDiv && !participant) {
@@ -202,6 +214,7 @@ const ParticipantView: React.FC = () => {
       const found = sess.participants.find(p => p.id === up.id);
       if (found) setParticipant(found);
     }
+    setPendingActions(syncService.getPendingActions());
   };
 
   useEffect(() => {
@@ -432,9 +445,42 @@ const ParticipantView: React.FC = () => {
     );
   }
 
-  if (!session) return null;
+  if (!session || !participant) return null;
 
   const myRequests = session.requests.filter(r => r.participantId === participant.id);
+
+  // Rotation Position Logic (Interleaved sorting matching DJ and Rotation Tab)
+  const approvedSingingRaw = session.requests.filter(r => r.status === RequestStatus.APPROVED && r.type === RequestType.SINGING && !r.isInRound);
+  const participantsWithSongs = session.participants.filter(p => approvedSingingRaw.some(r => r.participantId === p.id))
+    .sort((a, b) => (b.joinedAt || 0) - (a.joinedAt || 0));
+
+  const requestsByParticipant: { [key: string]: SongRequest[] } = {};
+  approvedSingingRaw.forEach(r => {
+    if (!requestsByParticipant[r.participantId]) requestsByParticipant[r.participantId] = [];
+    requestsByParticipant[r.participantId].push(r);
+  });
+
+  Object.keys(requestsByParticipant).forEach(pid => {
+    requestsByParticipant[pid].sort((a, b) => a.createdAt - b.createdAt);
+  });
+
+  const fullRotation: SongRequest[] = [];
+  let round = 0;
+  let hasMore = true;
+  while (hasMore) {
+    hasMore = false;
+    participantsWithSongs.forEach(p => {
+      if (requestsByParticipant[p.id] && requestsByParticipant[p.id][round]) {
+        fullRotation.push(requestsByParticipant[p.id][round]);
+        hasMore = true;
+      }
+    });
+    round++;
+  }
+
+  const myFirstInRotation = fullRotation.findIndex(r => r.participantId === participant.id);
+  const positionInLine = myFirstInRotation + 1;
+  const isOnStage = session.currentRound?.some(r => r.participantId === participant.id);
 
   return (
     <div className="max-w-2xl mx-auto p-6 space-y-10 relative">
@@ -454,9 +500,31 @@ const ParticipantView: React.FC = () => {
             <div className="absolute bottom-0 right-0 w-6 h-6 bg-black rounded-full flex items-center justify-center border-2 border-black z-20">
               <div className={`w-3 h-3 rounded-full animate-pulse shadow-[0_0_10px_currentColor] ${connectionStatus === 'connected' ? 'bg-[var(--neon-green)] text-[var(--neon-green)]' : connectionStatus === 'connecting' ? 'bg-[var(--neon-yellow)] text-[var(--neon-yellow)]' : 'bg-rose-500 text-rose-500'}`}></div>
             </div>
+            {/* Sync Mode Indicator */}
+            <div className="absolute -bottom-2 -left-2 bg-[#101015] border border-white/10 rounded-lg px-2 py-0.5 text-[8px] font-black tracking-widest text-[var(--neon-cyan)] shadow-xl z-30 uppercase font-righteous">
+              {connectionStatus === 'connected' ? 'P2P+CLOUD' : 'CLOUD-ONLY'}
+            </div>
           </div>
 
           <h2 className="text-4xl font-bold text-white tracking-tight uppercase leading-none font-bungee mb-2">{participant.name}</h2>
+
+          {/* Position Indicator */}
+          {positionInLine > 0 && !isOnStage && (
+            <div className="mb-4 px-6 py-2 bg-[var(--neon-cyan)]/10 border border-[var(--neon-cyan)]/30 rounded-full inline-flex items-center gap-3">
+              <span className="w-2 h-2 bg-[var(--neon-cyan)] rounded-full animate-pulse"></span>
+              <span className="text-[var(--neon-cyan)] font-black text-xs uppercase tracking-[0.2em] font-righteous">
+                {positionInLine === 1 ? 'NEXT UP IN ROTATION' : `${positionInLine}${positionInLine === 2 ? 'ND' : positionInLine === 3 ? 'RD' : 'TH'} IN LINE`}
+              </span>
+            </div>
+          )}
+
+          {isOnStage && (
+            <div className="mb-4 px-6 py-2 bg-[var(--neon-green)]/10 border border-[var(--neon-green)]/30 rounded-full inline-flex items-center gap-3 shadow-[0_0_20px_rgba(0,255,157,0.2)]">
+              <span className="w-2 h-2 bg-[var(--neon-green)] rounded-full animate-blink"></span>
+              <span className="text-[var(--neon-green)] font-black text-xs uppercase tracking-[0.2em] font-righteous">LIVE ON STAGE</span>
+            </div>
+          )}
+
           <div className="flex items-center gap-3">
             <button
               onClick={() => {
@@ -610,44 +678,13 @@ const ParticipantView: React.FC = () => {
             <h3 className="text-[var(--neon-green)] font-black uppercase tracking-[0.3em] text-sm px-4 font-righteous opacity-80">COMING UP</h3>
             <div className="space-y-4">
               {(() => {
-                // Custom Interleaved Sorting Logic (Matching DJ View)
-                const pendingRequests = session.requests.filter(r => r.status === RequestStatus.PENDING && !r.isInRound);
-                const approvedSingingRaw = session.requests.filter(r => r.status === RequestStatus.APPROVED && r.type === RequestType.SINGING && !r.isInRound);
-
-                const participantsWithSongs = session.participants.filter(p => approvedSingingRaw.some(r => r.participantId === p.id))
-                  .sort((a, b) => (b.joinedAt || 0) - (a.joinedAt || 0)); // Rank by Newest First
-
-                const requestsByParticipant: { [key: string]: SongRequest[] } = {};
-                approvedSingingRaw.forEach(r => {
-                  if (!requestsByParticipant[r.participantId]) requestsByParticipant[r.participantId] = [];
-                  requestsByParticipant[r.participantId].push(r);
-                });
-
-                Object.keys(requestsByParticipant).forEach(pid => {
-                  requestsByParticipant[pid].sort((a, b) => a.createdAt - b.createdAt);
-                });
-
-                const approvedSinging: SongRequest[] = [];
-                let round = 0;
-                let hasMore = true;
-                while (hasMore) {
-                  hasMore = false;
-                  participantsWithSongs.forEach(p => {
-                    if (requestsByParticipant[p.id] && requestsByParticipant[p.id][round]) {
-                      approvedSinging.push(requestsByParticipant[p.id][round]);
-                      hasMore = true;
-                    }
-                  });
-                  round++;
-                }
-
-                if (approvedSinging.length === 0) return (
+                if (fullRotation.length === 0) return (
                   <div className="text-center py-16 opacity-30 border-2 border-dashed border-white/5 rounded-[2.5rem] bg-black/20">
                     <p className="text-sm font-black uppercase tracking-[0.4em] font-righteous text-slate-600">QUEUE EMPTY</p>
                   </div>
                 );
 
-                return approvedSinging.map((req, i) => (
+                return fullRotation.map((req, i) => (
                   <div key={req.id} className="bg-[#101015] border-2 border-white/5 p-6 rounded-[2rem] flex justify-between items-center group hover:border-[var(--neon-blue)] transition-all">
                     <div className="min-w-0 pr-4">
                       <div className="text-white font-bold uppercase truncate text-2xl font-bungee tracking-tight mb-1 group-hover:text-[var(--neon-blue)] transition-colors">{req.songName}</div>
@@ -668,6 +705,29 @@ const ParticipantView: React.FC = () => {
 
         {activeTab === 'REQUESTS' && (
           <section className="animate-in slide-in-from-bottom-8 duration-500 space-y-4">
+            {pendingActions.filter(a => a.type === 'ADD_REQUEST' && (a.payload as any).participantId === participant?.id).map((action, i) => (
+              <div key={`pending-${i}`} className="relative group opacity-60">
+                <div className="bg-[#151520] border-2 border-dashed border-[var(--neon-cyan)]/30 p-6 rounded-[2rem]">
+                  <div className="flex justify-between items-start">
+                    <div className="min-w-0 pr-4">
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="font-bold text-white tracking-tight uppercase truncate font-bungee text-3xl italic">
+                          {(action.payload as any).songName}
+                        </div>
+                      </div>
+                      <div className="text-base text-slate-400 font-bold uppercase tracking-[0.2em] truncate font-righteous">{(action.payload as any).artist}</div>
+                    </div>
+                    <div className="shrink-0 px-3 py-1 rounded-lg border border-[var(--neon-cyan)]/30 text-[var(--neon-cyan)] text-xs font-black uppercase tracking-widest animate-pulse">
+                      SENDING...
+                    </div>
+                  </div>
+                  <div className="mt-4 text-[10px] text-[var(--neon-cyan)] font-bold tracking-widest uppercase opacity-60 font-mono">
+                    CLOUD BUFFERED // AUTO-RETRYING
+                  </div>
+                </div>
+              </div>
+            ))}
+
             {myRequests.map(req => (
               <div key={req.id} className="relative group">
                 <div className="bg-[#151520] border-2 border-white/5 p-6 rounded-[2rem] hover:border-[var(--neon-pink)] transition-all">
