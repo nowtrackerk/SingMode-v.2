@@ -80,17 +80,22 @@ class SyncService {
       console.log(`[Sync] Attempting to claim network lock: ${lockId}`);
 
       const lockAcquired = await new Promise<boolean>((resolve) => {
+        const timeout = setTimeout(() => {
+          console.warn('[Sync] Lock acquisition timed out, proceeding anyway');
+          resolve(true);
+        }, 10000);
+
         const tempLock = new Peer(lockId, { debug: 1 });
         tempLock.on('open', () => {
+          clearTimeout(timeout);
           this.lockPeer = tempLock;
           resolve(true);
         });
         tempLock.on('error', (err) => {
+          clearTimeout(timeout);
           if (err.type === 'unavailable-id') {
             resolve(false);
           } else {
-            // Some other error, might be network. We shouldn't block DJing just because signaling is down
-            // But usually this means we can't be sure about the lock.
             resolve(true);
           }
           tempLock.destroy();
@@ -103,6 +108,11 @@ class SyncService {
     }
 
     return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        console.warn('[Sync] Main peer initialization timed out, proceeding anyway');
+        resolve(this.isHost ? (room || 'fallback-host') : 'fallback-peer');
+      }, 20000);
+
       // Step 2: Initialize actual Data Peer
       // For DJs, always generate a fresh unique ID for the QR code
       const id = this.isHost ? (room || `singmode-${Math.random().toString(36).substr(2, 6)}`) : undefined;
@@ -115,19 +125,13 @@ class SyncService {
             { urls: 'stun:stun1.l.google.com:19302' },
             { urls: 'stun:stun2.l.google.com:19302' },
             { urls: 'stun:stun3.l.google.com:19302' },
-            { urls: 'stun:stun4.l.google.com:19302' },
-            { urls: 'stun:stun.stuntmanit.com:3478' },
-            { urls: 'stun:stun.ekiga.net' },
-            { urls: 'stun:stun.ideasip.com' },
-            { urls: 'stun:stun.schlund.de' },
-            { urls: 'stun:stun.voiparound.com' },
-            { urls: 'stun:stun.voipbuster.com' },
-            { urls: 'stun:stun.voipstunt.com' }
+            { urls: 'stun:stun4.l.google.com:19302' }
           ]
         }
       });
 
       this.peer.on('open', (peerId) => {
+        clearTimeout(timeout);
         console.log(`[Sync] Peer opened with ID: ${peerId}`);
         if (this.isHost) {
           this.hostId = peerId;

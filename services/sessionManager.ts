@@ -311,25 +311,39 @@ export const removeDevice = async (deviceId: string) => {
 };
 
 export const getSession = async (sessionId?: string): Promise<KaraokeSession> => {
-  // If we have a session ID and we are the host, prioritize the cloud state (for refreshes)
-  if (!isRemoteClient && sessionId) {
-    const cloudSess = await getSessionById(sessionId);
-    if (cloudSess) return cloudSess;
-  }
+  const timeoutPromise = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error("Timeout: getSession took too long")), 15000)
+  );
 
-  const session = await storage.get(STORAGE_KEY) || { ...INITIAL_SESSION };
-  if (!session.history) session.history = [];
-  if (!session.messages) session.messages = [];
-  if (!session.tickerMessages) session.tickerMessages = [];
-  if (!session.verifiedSongbook) session.verifiedSongbook = [];
-  if (session.isPlayingVideo === undefined) session.isPlayingVideo = false;
-  if (!session.nextRequestNumber) session.nextRequestNumber = 1;
-  if (session.maxRequestsPerUser === undefined) session.maxRequestsPerUser = 5;
-  if (!session.bannedUsers) session.bannedUsers = [];
-  if (!session.deviceConnections) session.deviceConnections = [];
-  if (!session.logs) session.logs = [];
-  if (!session.queueStrategy) session.queueStrategy = QueueStrategy.FRESH_MEAT;
-  return session;
+  try {
+    const sessionPromise = (async () => {
+      // If we have a session ID and we are the host, prioritize the cloud state (for refreshes)
+      if (!isRemoteClient && sessionId) {
+        const cloudSess = await getSessionById(sessionId);
+        if (cloudSess) return cloudSess;
+      }
+
+      const session = await storage.get(STORAGE_KEY) || { ...INITIAL_SESSION };
+      if (!session.history) session.history = [];
+      if (!session.messages) session.messages = [];
+      if (!session.tickerMessages) session.tickerMessages = [];
+      if (!session.verifiedSongbook) session.verifiedSongbook = [];
+      if (session.isPlayingVideo === undefined) session.isPlayingVideo = false;
+      if (!session.nextRequestNumber) session.nextRequestNumber = 1;
+      if (session.maxRequestsPerUser === undefined) session.maxRequestsPerUser = 5;
+      if (!session.bannedUsers) session.bannedUsers = [];
+      if (!session.deviceConnections) session.deviceConnections = [];
+      if (!session.logs) session.logs = [];
+      if (!session.queueStrategy) session.queueStrategy = QueueStrategy.FRESH_MEAT;
+      return session;
+    })();
+
+    return await Promise.race([sessionPromise, timeoutPromise]);
+  } catch (e) {
+    console.warn("[Session] getSession fallback to local due to timeout or error:", e);
+    const local = await storage.get(STORAGE_KEY) || { ...INITIAL_SESSION };
+    return local;
+  }
 };
 
 export const saveSession = async (session: KaraokeSession) => {
@@ -353,16 +367,24 @@ export const saveSession = async (session: KaraokeSession) => {
 };
 
 export const getSessionById = async (sessionId: string): Promise<KaraokeSession | null> => {
+  const timeoutPromise = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error(`Timeout: getSessionById for ${sessionId} took too long`)), 10000)
+  );
+
   try {
-    const sessionDoc = doc(db, "sessions", sessionId);
-    const snapshot = await getDoc(sessionDoc);
-    if (snapshot.exists()) {
-      const data = snapshot.data();
-      if (data.fullState) {
-        return JSON.parse(data.fullState) as KaraokeSession;
+    const fetchPromise = (async () => {
+      const sessionDoc = doc(db, "sessions", sessionId);
+      const snapshot = await getDoc(sessionDoc);
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        if (data.fullState) {
+          return JSON.parse(data.fullState) as KaraokeSession;
+        }
       }
-    }
-    return null;
+      return null;
+    })();
+
+    return await Promise.race([fetchPromise, timeoutPromise]);
   } catch (e) {
     console.error(`[SessionManager] Error fetching session ${sessionId}:`, e);
     return null;
