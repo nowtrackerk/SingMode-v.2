@@ -108,17 +108,21 @@ class SyncService {
     }
 
     return new Promise((resolve, reject) => {
+      const id = this.isHost ? (room || `singmode-${Math.random().toString(36).substr(2, 6)}`) : undefined;
+      console.log(`[Sync] Initializing Peer with ID: ${id || 'auto-generated'} (Role: ${role})`);
+
       const timeout = setTimeout(() => {
         console.warn('[Sync] Main peer initialization timed out, proceeding anyway');
-        resolve(this.isHost ? (room || 'fallback-host') : 'fallback-peer');
+        const fallbackId = this.isHost ? (room || 'fallback-host') : 'fallback-peer';
+        if (this.isHost) {
+          this.hostId = fallbackId;
+        }
+        resolve(fallbackId);
       }, 20000);
 
       // Step 2: Initialize actual Data Peer
-      // For DJs, always generate a fresh unique ID for the QR code
-      const id = this.isHost ? (room || `singmode-${Math.random().toString(36).substr(2, 6)}`) : undefined;
-
       this.peer = new Peer(id, {
-        debug: 1,
+        debug: 3, // Full logs for debugging sync issues
         config: {
           iceServers: [
             { urls: 'stun:stun.l.google.com:19302' },
