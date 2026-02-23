@@ -33,7 +33,7 @@ const App: React.FC = () => {
       }
 
       try {
-        // If room param is present, always force PARTICIPANT — never allow DJ via QR
+        // Handle initial role and sync
         if (room || sincUserId) {
           setRole('PARTICIPANT');
           await initializeSync('PARTICIPANT', room || undefined);
@@ -45,21 +45,22 @@ const App: React.FC = () => {
         } else {
           setRole('SELECT');
         }
+
+        // Pre-load session and cleanup
+        const s = await getSession();
+        if (s && s.customTheme) {
+          document.documentElement.style.setProperty('--neon-pink', s.customTheme.primaryNeon);
+          document.documentElement.style.setProperty('--neon-cyan', s.customTheme.secondaryNeon);
+          document.documentElement.style.setProperty('--neon-yellow', s.customTheme.accentNeon);
+        }
+        await cleanupExpiredGuestAccounts();
       } catch (err: any) {
         console.error('[App] Init Error:', err);
         setError(err.message);
-        setRole('SELECT'); // Revert to select role on error
+        setRole('SELECT');
+      } finally {
+        setLoading(false);
       }
-
-      // Pre-load session to avoid flickering
-      const s = await getSession();
-      if (s.customTheme) {
-        document.documentElement.style.setProperty('--neon-pink', s.customTheme.primaryNeon);
-        document.documentElement.style.setProperty('--neon-cyan', s.customTheme.secondaryNeon);
-        document.documentElement.style.setProperty('--neon-yellow', s.customTheme.accentNeon);
-      }
-      await cleanupExpiredGuestAccounts();
-      setLoading(false);
     };
     init();
   }, []);
@@ -79,8 +80,6 @@ const App: React.FC = () => {
       setLoading(false);
     }
   };
-
-
 
   const handleSaveNetworkIp = () => {
     if (networkIpInput.trim()) {
@@ -119,7 +118,6 @@ const App: React.FC = () => {
     const isUsingLocalhost = currentUrl.includes('localhost') || currentUrl.includes('127.0.0.1');
 
     return (
-
       <div className="min-h-screen flex items-center justify-center p-6 bg-[#050510] relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-black via-[#10002B] to-black -z-10"></div>
         <div className="absolute top-0 left-0 w-full h-full bg-[url('/grid.svg')] opacity-10"></div>
@@ -149,8 +147,6 @@ const App: React.FC = () => {
               <p className="text-rose-500/50 text-xs mt-8 uppercase font-bold tracking-widest font-righteous">SINGLE_DJ_PROTOCOL_ACTIVE</p>
             </div>
           )}
-
-
 
           <div className={`grid gap-8 ${isQRCodeUser ? 'grid-cols-1 max-w-2xl mx-auto' : 'md:grid-cols-2'}`}>
             {!isQRCodeUser && (
@@ -252,8 +248,6 @@ const App: React.FC = () => {
     );
   }
 
-
-
   return (
     <div className="min-h-screen bg-[#050510] text-white selection:bg-[var(--neon-pink)] selection:text-white">
       <nav className="fixed top-0 inset-x-0 z-[100] backdrop-blur-xl bg-black/80 border-b border-white/5 transition-all duration-300">
@@ -282,8 +276,6 @@ const App: React.FC = () => {
           <ParticipantView />
         )}
       </main>
-
-
     </div>
   );
 };
