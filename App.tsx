@@ -33,9 +33,6 @@ const App: React.FC = () => {
       }
 
       try {
-        if (!import.meta.env.VITE_FIREBASE_API_KEY) {
-          throw new Error("SYSTEM_ERROR: Firebase Configuration Missing. Deployment might be misconfigured.");
-        }
         // Handle initial role and sync
         if (room || sincUserId) {
           setRole('PARTICIPANT');
