@@ -168,9 +168,13 @@ class SyncService {
         console.error('[Sync] Peer error:', err.type, err);
 
         if (err.type === 'unavailable-id') {
-          // This should be rare now with random IDs, but if it happens, try again
-          this.destroy();
-          this.initialize(role).then(resolve).catch(reject);
+          // If a specific room ID was requested and it's taken, reject to let the UI know
+          if (room) {
+            reject(new Error(`The session name "${room}" is currently in use. Please try another name or wait a moment.`));
+          } else {
+            this.destroy();
+            this.initialize(role).then(resolve).catch(reject);
+          }
         } else if (err.type === 'network' || err.type === 'server-error' || err.message?.includes('Lost connection')) {
           if (this.onConnectionStatus) this.onConnectionStatus('disconnected');
           this.handleNetworkError(role, room);
