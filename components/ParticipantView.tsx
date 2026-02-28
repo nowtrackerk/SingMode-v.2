@@ -1,14 +1,28 @@
-
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Participant, KaraokeSession, ParticipantStatus, RequestType, RequestStatus, SongRequest, UserProfile, FavoriteSong, RemoteAction } from '../types';
-// Fixed: Removed non-existent 'isFavorite' from imports.
 import {
-  getSession, joinSession, updateParticipantStatus, addRequest, deleteRequest,
-  updateRequest, getUserProfile, toggleFavorite, saveUserProfile, registerUser,
-  loginUser, logoutUser, updateParticipantMic, reorderMyRequests, updateVocalRange, loginUserById,
-  getActiveSessions, initializeSync
+  getSession,
+  joinSession,
+  updateParticipantStatus,
+  addRequest,
+  deleteRequest,
+  updateRequest,
+  getUserProfile,
+  toggleFavorite,
+  saveUserProfile,
+  registerUser,
+  loginUser,
+  logoutUser,
+  updateParticipantMic,
+  reorderMyRequests,
+  updateVocalRange,
+  loginUserById,
+  getActiveSessions,
+  initializeSync,
+  getAllAccounts,
+  isRemoteClient
 } from '../services/sessionManager';
+import { db } from '../services/firebaseConfig';
 import SongRequestForm from './SongRequestForm';
 import { syncService } from '../services/syncService';
 import { getNetworkUrl } from '../services/networkUtils';
@@ -152,12 +166,20 @@ const ParticipantView: React.FC = () => {
     };
     init();
 
-    // Connection Timeout Logic
     const timeoutTimer = setTimeout(() => {
       if (!session || !participant) {
+        console.log("[Participant] Connection timeout, showing reconnect options.");
         setShowConnectTimeout(true);
       }
     }, 8000);
+
+    // Proactive State Request (Ask host if we are waiting too long)
+    const requestPulse = setInterval(() => {
+      if (!session || !participant) {
+        console.log("[Participant] Proactively requesting state...");
+        syncService.requestState();
+      }
+    }, 4000);
 
     syncService.onConnectionStatus = (status) => {
       setConnectionStatus(status);
@@ -191,6 +213,7 @@ const ParticipantView: React.FC = () => {
 
     return () => {
       clearTimeout(timeoutTimer);
+      clearInterval(requestPulse);
       syncService.onConnectionStatus = null;
       syncService.onStateReceived = null;
       syncService.onActionReceived = null;
@@ -357,7 +380,7 @@ const ParticipantView: React.FC = () => {
   const handleGuestSingNow = async () => {
     setAuthError('');
     try {
-      const guestName = `Guest-${Math.floor(Math.random() * 10000)}`;
+      const guestName = `Guest - ${Math.floor(Math.random() * 10000)}`;
       const result = await registerUser({ name: guestName }, true); // Auto-login true
       if (result.success && result.profile) {
         const newPart = await joinSession(result.profile.id);
@@ -375,7 +398,9 @@ const ParticipantView: React.FC = () => {
     }
   };
 
-  if (!participant) {
+  const showLogin = !participant && !userProfile && !isJoinedViaQR;
+
+  if (showLogin) {
     return (
       <div className="max-w-2xl mx-auto p-8 flex flex-col items-center justify-center min-h-[90vh] text-center animate-in fade-in duration-1000 relative">
         <div className="absolute inset-0 bg-gradient-to-b from-black via-[#10002B] to-black -z-10"></div>
@@ -535,7 +560,7 @@ const ParticipantView: React.FC = () => {
                 const room = new URLSearchParams(window.location.search).get('room');
                 if (room) {
                   console.log("[Participant] Manual RECONNECT triggered");
-                  await syncService.initialize('PARTICIPANT', room);
+                  await initializeSync('PARTICIPANT', room);
                   await refresh();
                 } else {
                   window.location.search = '';
@@ -559,7 +584,7 @@ const ParticipantView: React.FC = () => {
         {/* Status Indicator */}
         <div className="fixed bottom-12 left-0 right-0 flex justify-center">
           <div className="px-4 py-2 bg-black/40 backdrop-blur-md border border-white/5 rounded-full flex items-center space-x-3">
-            <div className={`w-2 h-2 rounded-full animate-ping ${connectionStatus === 'connected' ? 'bg-green-500' : 'bg-amber-500'}`}></div>
+            <div className={`w - 2 h - 2 rounded - full animate - ping ${connectionStatus === 'connected' ? 'bg-green-500' : 'bg-amber-500'} `}></div>
             <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Network: {connectionStatus}</span>
           </div>
         </div>
@@ -618,7 +643,7 @@ const ParticipantView: React.FC = () => {
             <div className="absolute inset-0 rounded-full bg-[var(--neon-pink)]/20 blur-xl"></div>
             <img src="IGK.jpeg" alt="Logo" className="w-full h-full rounded-full object-cover relative z-10" />
             <div className="absolute bottom-0 right-0 w-6 h-6 bg-black rounded-full flex items-center justify-center border-2 border-black z-20">
-              <div className={`w-3 h-3 rounded-full animate-pulse shadow-[0_0_10px_currentColor] ${connectionStatus === 'connected' ? 'bg-[var(--neon-green)] text-[var(--neon-green)]' : connectionStatus === 'connecting' ? 'bg-[var(--neon-yellow)] text-[var(--neon-yellow)]' : 'bg-rose-500 text-rose-500'}`}></div>
+              <div className={`w - 3 h - 3 rounded - full animate - pulse shadow - [0_0_10px_currentColor] ${connectionStatus === 'connected' ? 'bg-[var(--neon-green)] text-[var(--neon-green)]' : connectionStatus === 'connecting' ? 'bg-[var(--neon-yellow)] text-[var(--neon-yellow)]' : 'bg-rose-500 text-rose-500'} `}></div>
             </div>
             {/* Sync Mode Indicator */}
             <div className="absolute -bottom-2 -left-2 bg-[#101015] border border-white/10 rounded-lg px-2 py-0.5 text-[8px] font-black tracking-widest text-[var(--neon-cyan)] shadow-xl z-30 uppercase font-righteous">
@@ -674,10 +699,10 @@ const ParticipantView: React.FC = () => {
             {(session.currentRound || []).filter(s => s.status !== RequestStatus.DONE).map((song, i) => (
               <div
                 key={song.id}
-                className={`p-3 pl-6 pr-4 rounded-xl border-l-8 transition-all duration-300 flex items-center justify-between gap-4 w-full shadow-lg relative overflow-hidden group ${i === 0
+                className={`p - 3 pl - 6 pr - 4 rounded - xl border - l - 8 transition - all duration - 300 flex items - center justify - between gap - 4 w - full shadow - lg relative overflow - hidden group ${i === 0
                   ? 'bg-[#001005] border-l-[var(--neon-green)] border-y border-r border-[#1a3320] z-10 scale-[1.01]'
                   : 'bg-[#0a0a10] border-l-slate-700 border-y border-r border-white/10 opacity-70 hover:opacity-100'
-                  }`}
+                  } `}
               >
                 {/* Strip Background Grid Lines */}
                 <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_49%,rgba(255,255,255,0.03)_50%,transparent_51%)] bg-[length:50px_100%] pointer-events-none"></div>
@@ -691,7 +716,7 @@ const ParticipantView: React.FC = () => {
                         LIVE
                       </div>
                     )}
-                    <div className={`w-14 h-14 flex flex-col justify-center items-center border-2 rounded-xl transition-all shrink-0 ${i === 0 ? 'border-[var(--neon-green)] bg-[var(--neon-green)]/10 text-[var(--neon-green)]' : 'border-white/10 text-slate-400'}`}>
+                    <div className={`w - 14 h - 14 flex flex - col justify - center items - center border - 2 rounded - xl transition - all shrink - 0 ${i === 0 ? 'border-[var(--neon-green)] bg-[var(--neon-green)]/10 text-[var(--neon-green)]' : 'border-white/10 text-slate-400'} `}>
                       <span className="text-xl font-bold font-mono tracking-tighter">
                         {song.requestNumber}
                       </span>
@@ -700,7 +725,7 @@ const ParticipantView: React.FC = () => {
 
                   {/* Main Info */}
                   <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-6 min-w-0 flex-1">
-                    <h3 className={`text-xl sm:text-2xl font-black uppercase font-righteous tracking-tight leading-tight ${i === 0 ? 'text-white' : 'text-slate-300'}`}>
+                    <h3 className={`text - xl sm: text - 2xl font - black uppercase font - righteous tracking - tight leading - tight ${i === 0 ? 'text-white' : 'text-slate-300'} `}>
                       {song.songName}
                     </h3>
                     <div className="flex items-center gap-2 sm:gap-3 opacity-80 shrink-0">
@@ -727,12 +752,12 @@ const ParticipantView: React.FC = () => {
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all font-righteous flex flex-col items-center justify-center gap-1.5 ${activeTab === tab
+            className={`py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all font - righteous flex flex - col items - center justify - center gap - 1.5 ${activeTab === tab
               ? 'bg-[#151520] text-white shadow-[0_0_20px_rgba(255,255,255,0.05)] border border-white/10'
               : 'text-slate-600 hover:text-white hover:bg-white/5'
-              }`}
+              } `}
           >
-            <span className={`text-2xl mb-0.5 ${activeTab === tab ? 'text-[var(--neon-pink)]' : 'grayscale opacity-50'}`}>
+            <span className={`text - 2xl mb - 0.5 ${activeTab === tab ? 'text-[var(--neon-pink)]' : 'grayscale opacity-50'} `}>
               {tab === 'ROTATION' ? '💿' : tab === 'REQUESTS' ? '📼' : tab === 'FAVORITES' ? '⭐' : tab === 'HISTORY' ? '📜' : '🎤'}
             </span>
             {tab === 'ROTATION' ? 'STAGE' :
@@ -753,20 +778,20 @@ const ParticipantView: React.FC = () => {
       <div className="flex gap-4 pt-2">
         <button
           onClick={() => setStatus(ParticipantStatus.READY)}
-          className={`flex-1 py-4 rounded-[1.5rem] font-bold text-xl uppercase tracking-wider transition-all border-2 flex items-center justify-center gap-2 group relative overflow-hidden font-bungee ${participant.status === ParticipantStatus.READY
+          className={`flex - 1 py - 4 rounded - [1.5rem] font - bold text - xl uppercase tracking - wider transition - all border - 2 flex items - center justify - center gap - 2 group relative overflow - hidden font - bungee ${participant.status === ParticipantStatus.READY
             ? 'bg-[#051005] border-[var(--neon-green)] shadow-[0_0_30px_rgba(0,255,157,0.2)] text-[var(--neon-green)]'
             : 'bg-[#101015] border-white/5 text-slate-700 hover:border-white/10'
-            }`}
+            } `}
         >
           <span className="relative z-10">READY</span>
         </button>
 
         <button
           onClick={() => setStatus(ParticipantStatus.STANDBY)}
-          className={`flex-1 py-4 rounded-[1.5rem] font-bold text-xl uppercase tracking-wider transition-all border-2 flex items-center justify-center gap-2 group relative overflow-hidden font-bungee ${participant.status === ParticipantStatus.STANDBY
+          className={`flex - 1 py - 4 rounded - [1.5rem] font - bold text - xl uppercase tracking - wider transition - all border - 2 flex items - center justify - center gap - 2 group relative overflow - hidden font - bungee ${participant.status === ParticipantStatus.STANDBY
             ? 'bg-[#150505] border-rose-500 shadow-[0_0_30px_rgba(244,63,94,0.2)] text-rose-500'
             : 'bg-[#101015] border-white/5 text-slate-700 hover:border-white/10'
-            }`}
+            } `}
         >
           <span className="relative z-10">NOT YET</span>
         </button>
@@ -826,7 +851,7 @@ const ParticipantView: React.FC = () => {
         {activeTab === 'REQUESTS' && (
           <section className="animate-in slide-in-from-bottom-8 duration-500 space-y-4">
             {pendingActions.filter(a => a.type === 'ADD_REQUEST' && (a.payload as any).participantId === participant?.id).map((action, i) => (
-              <div key={`pending-${i}`} className="relative group opacity-60">
+              <div key={`pending - ${i} `} className="relative group opacity-60">
                 <div className="bg-[#151520] border-2 border-dashed border-[var(--neon-cyan)]/30 p-6 rounded-[2rem]">
                   <div className="flex justify-between items-start">
                     <div className="min-w-0 pr-4">
@@ -861,10 +886,10 @@ const ParticipantView: React.FC = () => {
                       </div>
                       <div className="text-base text-slate-400 font-bold uppercase tracking-[0.2em] truncate font-righteous">{req.artist}</div>
                     </div>
-                    <div className={`shrink-0 px-3 py-1 rounded-lg border text-xs font-black uppercase tracking-widest ${req.status === RequestStatus.APPROVED
+                    <div className={`shrink - 0 px - 3 py - 1 rounded - lg border text - xs font - black uppercase tracking - widest ${req.status === RequestStatus.APPROVED
                       ? (req.isInRound ? 'bg-[var(--neon-green)] border-[var(--neon-green)] text-black animate-pulse shadow-[0_0_15px_var(--neon-green)]' : 'bg-[var(--neon-cyan)]/10 border-[var(--neon-cyan)] text-[var(--neon-cyan)]')
                       : 'border-white/10 text-slate-600'
-                      }`}>
+                      } `}>
                       {req.status === RequestStatus.APPROVED ? (req.isInRound ? 'LIVE' : 'QUEUED') : 'PENDING'}
                     </div>
                   </div>
@@ -953,7 +978,7 @@ const ParticipantView: React.FC = () => {
                     </div>
                     <div className="flex gap-3">
                       <button onClick={() => { setPrefillData({ ...song }); setShowRequestForm(true); }} className="bg-[var(--neon-pink)] text-black px-4 py-2 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-white transition-all font-righteous shadow-[0_0_15px_rgba(255,0,127,0.3)] hover:scale-105 active:scale-95">ADD</button>
-                      <button onClick={async () => { await toggleFavorite(song); await refresh(); }} className={`px-2 transition-colors ${song.isFavorite ? 'text-rose-500' : 'text-slate-700 hover:text-[var(--neon-yellow)]'}`}>{song.isFavorite ? '✕' : '★'}</button>
+                      <button onClick={async () => { await toggleFavorite(song); await refresh(); }} className={`px - 2 transition - colors ${song.isFavorite ? 'text-rose-500' : 'text-slate-700 hover:text-[var(--neon-yellow)]'} `}>{song.isFavorite ? '✕' : '★'}</button>
                     </div>
                   </div>
                 ));
@@ -1001,7 +1026,7 @@ const ParticipantView: React.FC = () => {
                 {isScanning ? (
                   <div className="w-full space-y-3 py-2">
                     <div className="h-2 bg-white/5 rounded-full overflow-hidden">
-                      <div className="h-full bg-[var(--neon-cyan)] animate-pulse shadow-[0_0_10px_var(--neon-cyan)]" style={{ width: `${scanProgress}%` }}></div>
+                      <div className="h-full bg-[var(--neon-cyan)] animate-pulse shadow-[0_0_10px_var(--neon-cyan)]" style={{ width: `${scanProgress}% ` }}></div>
                     </div>
                     <div className="text-xs text-[var(--neon-cyan)] font-black animate-pulse font-righteous text-center tracking-[0.2em]">CALIBRATING VOICE...</div>
                   </div>
@@ -1075,7 +1100,7 @@ const ParticipantView: React.FC = () => {
 
             <SessionList
               onJoin={(id) => {
-                window.location.search = `?room=${id}`;
+                window.location.search = `? room = ${id} `;
               }}
               filterHostName="SingMode DJ"
             />
@@ -1090,42 +1115,44 @@ const ParticipantView: React.FC = () => {
             <button onClick={() => setShowQrModal(false)} className="absolute top-6 right-6 text-slate-700 hover:text-white text-3xl transition-colors">✕</button>
             <div className="bg-white p-4 rounded-[2rem] inline-block mb-8 shadow-[0_0_40px_rgba(255,255,255,0.1)]">
               <img src={`https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(roomJoinUrl)}&bgcolor=ffffff`} alt="Room QR" className="w-48 h-48" />
-            </div>
+            </div >
             <h3 className="text-5xl font-black text-white uppercase tracking-tight mb-2 font-bungee neon-glow-white">SYNC_NODE</h3>
             <p className="text-[var(--neon-cyan)] text-sm font-black uppercase tracking-[0.4em] font-righteous opacity-80">SCAN TO INITIALIZE CONNECTION</p>
-          </div>
-        </div>
+          </div >
+        </div >
       )}
-      {confirmState.isOpen && (
-        <div className="fixed inset-0 bg-black/95 flex items-center justify-center p-4 z-[300] backdrop-blur-3xl animate-in fade-in duration-300">
-          <div className="w-full max-w-md bg-[#050510] border-4 border-[var(--neon-pink)]/30 rounded-[3rem] p-10 text-center shadow-[0_0_100px_rgba(255,42,109,0.3)] animate-in zoom-in-95 duration-300 relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-1 bg-[var(--neon-pink)] shadow-[0_0_20px_rgba(255,42,109,0.8)]"></div>
-            <div className="w-20 h-20 bg-[var(--neon-pink)]/10 text-[var(--neon-pink)] rounded-[2rem] border-2 border-[var(--neon-pink)]/20 flex items-center justify-center mx-auto mb-6 text-4xl font-black shadow-[0_0_30px_rgba(255,42,109,0.2)] animate-pulse">⚠️</div>
-            <h2 className="text-5xl font-black text-white uppercase mb-4 tracking-tight font-bungee neon-text-glow-pink">CONFIRM</h2>
-            <p className="text-slate-400 text-lg mb-8 leading-relaxed font-black font-righteous uppercase tracking-widest">
-              {confirmState.message}
-            </p>
-            <div className="flex gap-4">
-              <button
-                onClick={() => setConfirmState(prev => ({ ...prev, isOpen: false }))}
-                className="flex-1 py-4 bg-black border-2 border-white/10 text-white rounded-xl text-base font-black uppercase tracking-widest font-righteous transition-all hover:bg-white/5"
-              >
-                CANCEL
-              </button>
-              <button
-                onClick={async () => {
-                  setConfirmState(prev => ({ ...prev, isOpen: false }));
-                  await confirmState.onConfirm();
-                }}
-                className="flex-[2] py-4 bg-[var(--neon-pink)] text-white rounded-xl text-base font-black uppercase tracking-widest font-righteous shadow-[0_0_30px_rgba(255,42,109,0.4)] transition-all hover:bg-rose-400 hover:scale-105"
-              >
-                PROCEED
-              </button>
+      {
+        confirmState.isOpen && (
+          <div className="fixed inset-0 bg-black/95 flex items-center justify-center p-4 z-[300] backdrop-blur-3xl animate-in fade-in duration-300">
+            <div className="w-full max-w-md bg-[#050510] border-4 border-[var(--neon-pink)]/30 rounded-[3rem] p-10 text-center shadow-[0_0_100px_rgba(255,42,109,0.3)] animate-in zoom-in-95 duration-300 relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-1 bg-[var(--neon-pink)] shadow-[0_0_20px_rgba(255,42,109,0.8)]"></div>
+              <div className="w-20 h-20 bg-[var(--neon-pink)]/10 text-[var(--neon-pink)] rounded-[2rem] border-2 border-[var(--neon-pink)]/20 flex items-center justify-center mx-auto mb-6 text-4xl font-black shadow-[0_0_30px_rgba(255,42,109,0.2)] animate-pulse">⚠️</div>
+              <h2 className="text-5xl font-black text-white uppercase mb-4 tracking-tight font-bungee neon-text-glow-pink">CONFIRM</h2>
+              <p className="text-slate-400 text-lg mb-8 leading-relaxed font-black font-righteous uppercase tracking-widest">
+                {confirmState.message}
+              </p>
+              <div className="flex gap-4">
+                <button
+                  onClick={() => setConfirmState(prev => ({ ...prev, isOpen: false }))}
+                  className="flex-1 py-4 bg-black border-2 border-white/10 text-white rounded-xl text-base font-black uppercase tracking-widest font-righteous transition-all hover:bg-white/5"
+                >
+                  CANCEL
+                </button>
+                <button
+                  onClick={async () => {
+                    setConfirmState(prev => ({ ...prev, isOpen: false }));
+                    await confirmState.onConfirm();
+                  }}
+                  className="flex-[2] py-4 bg-[var(--neon-pink)] text-white rounded-xl text-base font-black uppercase tracking-widest font-righteous shadow-[0_0_30px_rgba(255,42,109,0.4)] transition-all hover:bg-rose-400 hover:scale-105"
+                >
+                  PROCEED
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+    </div >
   );
 };
 

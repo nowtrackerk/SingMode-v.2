@@ -166,7 +166,8 @@ export type RemoteActionType =
   | 'REORDER_REQUESTS'
   | 'TOGGLE_FAVORITE'
   | 'REORDER_PENDING'
-  | 'REORDER_MY_REQUESTS';
+  | 'REORDER_MY_REQUESTS'
+  | 'REQUEST_STATE';
 
 export interface RemoteAction {
   type: RemoteActionType;

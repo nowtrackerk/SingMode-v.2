@@ -8,7 +8,7 @@ const STORAGE_KEY = 'kstar_karaoke_session';
 const PROFILE_KEY = 'kstar_active_user';
 const ACCOUNTS_KEY = 'kstar_user_accounts';
 
-let isRemoteClient = false;
+export let isRemoteClient = false;
 let sessionUpdatePromise: Promise<any> = Promise.resolve();
 
 /**
@@ -111,6 +111,12 @@ async function handleRemoteAction(action: RemoteAction) {
     }
     case 'TOGGLE_STATUS':
       await updateParticipantStatus(action.payload.id, action.payload.status);
+      break;
+    case 'REQUEST_STATE':
+      if (!isRemoteClient) {
+        const session = await getSession();
+        syncService.broadcastState(session);
+      }
       break;
     case 'TOGGLE_MIC':
       await updateParticipantMic(action.payload.id, action.payload.enabled);

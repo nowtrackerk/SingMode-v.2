@@ -308,6 +308,15 @@ class SyncService {
     }
   }
 
+  requestState() {
+    if (this.isHost) return;
+    this.sendAction({
+      type: 'REQUEST_STATE' as any,
+      payload: {},
+      senderId: this.getMyPeerId() || 'participant'
+    });
+  }
+
   getRoomId(): string | null { return this.peer?.id || null; }
   getMyPeerId(): string | null { return this.peer?.id || null; }
   getHostId(): string | null { return this.hostId; }
