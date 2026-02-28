@@ -11,8 +11,9 @@ class SyncService {
   private isHost: boolean = false;
   private heartbeatInterval: number | null = null;
   private retryCount: number = 0;
-  private maxRetries: number = 10;
+  private maxRetries: number = 20; // Increased retries
   private actionQueue: RemoteAction[] = [];
+  private initializationParams: { role: 'DJ' | 'PARTICIPANT', room?: string } | null = null;
 
   public onStateReceived: ((state: KaraokeSession) => void) | null = null;
   public onActionReceived: ((action: RemoteAction) => void) | null = null;
@@ -62,20 +63,34 @@ class SyncService {
     }
   }
 
+  private sanitizeID(id: string): string {
+    return id.replace(/[^a-zA-Z0-9-_]/g, '-').toLowerCase();
+  }
+
   async initialize(role: 'DJ' | 'PARTICIPANT', room?: string): Promise<string> {
-    this.isHost = role === 'DJ';
-    if (!this.isHost && room) {
-      this.hostId = room;
+    // Allow re-initialization if the peer is destroyed or disconnected
+    if (this.peer && !this.peer.destroyed && !this.peer.disconnected && this.initializationParams?.role === role && this.initializationParams?.room === room) {
+      console.log(`[Sync] Already connected as ${role} to ${room || 'host'}. Skipping redundant init.`);
+      return this.peer.id || 'initializing';
     }
 
-    if (this.peer) {
-      this.destroy();
+    if (this.peer && this.peer.disconnected && !this.peer.destroyed && this.initializationParams?.role === role && this.initializationParams?.room === room) {
+      console.log(`[Sync] Peer is disconnected, attempting to reconnect...`);
+      this.peer.reconnect();
+      return this.peer.id || 'reconnecting';
+    }
+
+    this.initializationParams = { role, room };
+    this.isHost = role === 'DJ';
+    if (!this.isHost && room) {
+      this.hostId = this.sanitizeID(room);
+      console.log(`[Sync] Participant role: Target hostId set to ${this.hostId}`);
     }
 
     // Step 1: Singleton Lock Enforcement for DJs
     if (this.isHost && !room) {
       const ip = await this.getPublicIP();
-      const lockId = `singmode-lock-${btoa(ip).replace(/=/g, '').substr(0, 12)}`;
+      const lockId = this.sanitizeID(`singmode-lock-${btoa(ip).replace(/=/g, '').substr(0, 12)}`);
 
       console.log(`[Sync] Attempting to claim network lock: ${lockId}`);
 
@@ -108,7 +123,7 @@ class SyncService {
     }
 
     return new Promise((resolve, reject) => {
-      const id = this.isHost ? (room || `singmode-${Math.random().toString(36).substr(2, 6)}`) : undefined;
+      const id = this.isHost ? (room ? this.sanitizeID(room) : `singmode-${Math.random().toString(36).substr(2, 6)}`) : undefined;
       console.log(`[Sync] Initializing Peer with ID: ${id || 'auto-generated'} (Role: ${role})`);
 
       const timeout = setTimeout(() => {
@@ -216,9 +231,11 @@ class SyncService {
     if (this.onConnectionStatus) this.onConnectionStatus('connecting');
 
     const conn = this.peer.connect(hostId, {
-      reliable: true
+      reliable: true,
+      metadata: { timestamp: Date.now() } // Add metadata for debugging
     });
 
+    console.log(`[Sync] Connection attempt initiated to host: ${hostId}`);
     this.handleConnection(conn);
   }
 
@@ -321,12 +338,18 @@ class SyncService {
     }
 
     // 3. Attempt direct transmission if connected
+    let sentDirectly = false;
     this.connections.forEach(conn => {
       if (conn.open) {
         console.log('[Sync] Sending action directly via PeerJS:', action.type);
         conn.send(action);
+        sentDirectly = true;
       }
     });
+
+    if (!sentDirectly) {
+      console.log('[Sync] PeerJS connection not open, relying on Firestore buffer for:', action.type);
+    }
   }
 
   getRoomId(): string | null {

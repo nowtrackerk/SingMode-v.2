@@ -150,7 +150,27 @@ const ParticipantView: React.FC = () => {
     syncService.onConnectionStatus = (status) => {
       setConnectionStatus(status);
     };
-  }, [roomId]);
+
+    syncService.onStateReceived = (newState) => {
+      console.log("[Participant] State updated via SyncService");
+      setSession(newState);
+      if (userProfile) {
+        const found = newState.participants.find(p => p.id === userProfile.id);
+        if (found) setParticipant(found);
+      }
+    };
+
+    syncService.onActionReceived = (action) => {
+      console.log("[Participant] Action received via SyncService:", action.type);
+      refresh(); // Fallback refresh on action
+    };
+
+    return () => {
+      syncService.onConnectionStatus = null;
+      syncService.onStateReceived = null;
+      syncService.onActionReceived = null;
+    };
+  }, [userProfile?.id, roomId]); // More specific dependencies
 
   /* 
   // Google Sign-In is currently disabled as it requires a valid Client ID.

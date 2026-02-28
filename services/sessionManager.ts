@@ -187,6 +187,7 @@ async function handleRemoteAction(action: RemoteAction) {
 
 export const initializeSync = async (role: 'DJ' | 'PARTICIPANT', room?: string) => {
   isRemoteClient = role === 'PARTICIPANT' && !!room;
+  console.log(`[SessionManager] Setting up sync. Role: ${role}, Room: ${room || 'New Session'}`);
   const peerId = await syncService.initialize(role, room);
 
   // Initialize Firebase Realtime Sync for Users if we are the DJ/Host
@@ -196,12 +197,17 @@ export const initializeSync = async (role: 'DJ' | 'PARTICIPANT', room?: string) 
     const hostName = user?.name || "SingMode DJ";
     const hostUid = user?.id;
 
+    // Ensure current local session uses the same ID as the P2P/Global session
+    const currentSession = await getSession();
+    currentSession.id = peerId;
+    await saveSession(currentSession);
+
     await registerSession({
       id: peerId,
       hostName,
       hostUid,
       isActive: true,
-      startedAt: Date.now()
+      startedAt: currentSession.startedAt || Date.now()
     });
 
     // Heartbeat every 2 minutes
@@ -247,16 +253,19 @@ export const initializeSync = async (role: 'DJ' | 'PARTICIPANT', room?: string) 
 
     // Host Action Buffer Listener: Handle actions sent via Firestore when PeerJS is down
     const actionsRef = collection(db, "sessions", peerId, "pending_actions");
+    console.log("[SessionManager] Subscribing to Firestore action buffer:", peerId);
     onSnapshot(actionsRef, (snapshot) => {
       snapshot.docChanges().forEach(async (change) => {
         if (change.type === "added") {
           const action = change.doc.data() as RemoteAction;
-          console.log("[SessionManager] Received buffered action from Firestore:", action.type);
+          console.log("[SessionManager] Received buffered action from Firestore:", action.type, "from", action.senderId);
           await handleRemoteAction(action);
           // Delete to clear buffer
           await deleteDoc(change.doc.ref);
         }
       });
+    }, (error) => {
+      console.error("[SessionManager] Firestore action buffer subscription error:", error);
     });
   }
 
@@ -264,8 +273,12 @@ export const initializeSync = async (role: 'DJ' | 'PARTICIPANT', room?: string) 
   if (isRemoteClient && room) {
     console.log("[Sync] Initializing robust Firestore fallback sync for room:", room);
     subscribeToSession(room, (newState) => {
-      console.log("[Sync] Received state update via Firestore fallback");
+      console.log("[Sync] Received state update via Firestore fallback. Connection status:", syncService.getMyPeerId() ? "P2P Pending/Active" : "Cloud Only");
       syncService.applyIncomingState(newState);
+      // If we got state via Cloud, we are "connected" to the session at a high level
+      if (syncService.onConnectionStatus) {
+        syncService.onConnectionStatus('connected');
+      }
     });
   }
 };
@@ -317,10 +330,16 @@ export const getSession = async (sessionId?: string): Promise<KaraokeSession> =>
 
   try {
     const sessionPromise = (async () => {
-      // If we have a session ID and we are the host, prioritize the cloud state (for refreshes)
-      if (!isRemoteClient && sessionId) {
+      // If we have a session ID, prioritize the cloud state (especially for remote participants joining)
+      if (sessionId) {
         const cloudSess = await getSessionById(sessionId);
-        if (cloudSess) return cloudSess;
+        if (cloudSess) {
+          // Ensure remote clients sync their local storage with the cloud state they just found
+          if (isRemoteClient) {
+            await storage.set(STORAGE_KEY, cloudSess);
+          }
+          return cloudSess;
+        }
       }
 
       const session = await storage.get(STORAGE_KEY) || { ...INITIAL_SESSION };
