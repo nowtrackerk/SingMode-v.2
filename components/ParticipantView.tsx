@@ -173,7 +173,7 @@ const ParticipantView: React.FC = () => {
       syncService.onStateReceived = null;
       syncService.onActionReceived = null;
     };
-  }, [userProfile?.id, roomId]); // More specific dependencies
+  }, [userProfile?.id, targetHostId]); // More specific dependencies
 
   /* 
   // Google Sign-In is currently disabled as it requires a valid Client ID.
