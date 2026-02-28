@@ -86,6 +86,7 @@ syncService.onPeerConnected = async () => {
 };
 
 async function handleRemoteAction(action: RemoteAction) {
+  console.log(`[SessionManager] Processing remote action: ${action.type} from ${action.senderId}`);
   switch (action.type) {
     case 'ADD_REQUEST':
       await addRequest(action.payload);
@@ -270,16 +271,19 @@ export const initializeSync = async (role: 'DJ' | 'PARTICIPANT', room?: string) 
   }
 
   // Participants: Setup direct Firestore state subscription as a robust fallback
-  if (isRemoteClient && room) {
-    console.log("[Sync] Initializing robust Firestore fallback sync for room:", room);
-    subscribeToSession(room, (newState) => {
-      console.log("[Sync] Received state update via Firestore fallback. Connection status:", syncService.getMyPeerId() ? "P2P Pending/Active" : "Cloud Only");
-      syncService.applyIncomingState(newState);
-      // If we got state via Cloud, we are "connected" to the session at a high level
-      if (syncService.onConnectionStatus) {
-        syncService.onConnectionStatus('connected');
-      }
-    });
+  if (isRemoteClient) {
+    const fallbackId = syncService.getHostId() || room;
+    if (fallbackId) {
+      console.log("[Sync] Initializing robust Firestore fallback sync for room:", fallbackId);
+      subscribeToSession(fallbackId, (newState) => {
+        console.log("[Sync] Received state update via Firestore fallback. Connection status:", syncService.getMyPeerId() ? "P2P Pending/Active" : "Cloud Only");
+        syncService.applyIncomingState(newState);
+        // If we got state via Cloud, we are "connected" to the session at a high level
+        if (syncService.onConnectionStatus) {
+          syncService.onConnectionStatus('connected');
+        }
+      });
+    }
   }
 };
 
