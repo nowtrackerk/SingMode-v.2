@@ -68,7 +68,6 @@ class SyncService {
   }
 
   async initialize(role: 'DJ' | 'PARTICIPANT', room?: string): Promise<string> {
-    // Allow re-initialization if the peer is destroyed or disconnected
     if (this.peer && !this.peer.destroyed && !this.peer.disconnected && this.initializationParams?.role === role && this.initializationParams?.room === room) {
       console.log(`[Sync] Already connected as ${role} to ${room || 'host'}. Skipping redundant init.`);
       return this.peer.id || 'initializing';
@@ -78,6 +77,13 @@ class SyncService {
       console.log(`[Sync] Peer is disconnected, attempting to reconnect...`);
       this.peer.reconnect();
       return this.peer.id || 'reconnecting';
+    }
+
+    // If we've reached here, either we're not initialized or parameters have changed.
+    // Clean up existing peer if it exists before creating a new one with new params.
+    if (this.peer && !this.peer.destroyed) {
+      console.log("[Sync] Parameters changed or peer state invalid, destroying old peer...");
+      this.destroy();
     }
 
     this.initializationParams = { role, room };
@@ -353,11 +359,15 @@ class SyncService {
   }
 
   getRoomId(): string | null {
-    return this.hostId;
+    return this.peer ? this.peer.id : null;
   }
 
   getMyPeerId(): string | null {
     return this.peer?.id || null;
+  }
+
+  getHostId(): string | null {
+    return this.hostId;
   }
 
   applyIncomingState(state: KaraokeSession) {

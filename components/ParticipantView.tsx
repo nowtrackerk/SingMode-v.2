@@ -59,22 +59,24 @@ const ParticipantView: React.FC = () => {
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'connecting'>('connecting');
   const [djHostName, setDjHostName] = useState<string | undefined>(undefined);
   const [pendingActions, setPendingActions] = useState<RemoteAction[]>([]);
+  const isInitialized = useRef(false);
 
-  const roomId = syncService.getRoomId();
-  const roomJoinUrl = getNetworkUrl() + (roomId ? `?room=${roomId}` : '');
+  const localPeerId = syncService.getMyPeerId();
+  const targetHostId = syncService.getHostId();
+  const roomJoinUrl = getNetworkUrl() + (targetHostId ? `?room=${targetHostId}` : '');
 
   // Detect if user arrived via QR / room link — lock them into ParticipantView
   const isJoinedViaQR = !!(new URLSearchParams(window.location.search).get('room') ||
     new URLSearchParams(window.location.search).get('userId'));
 
-  // Fetch the DJ's hostName from the active session matching our roomId
+  // Fetch the DJ's hostName from the active session matching our targetHostId
   useEffect(() => {
-    if (!roomId) return;
+    if (!targetHostId) return;
     getActiveSessions().then(sessions => {
-      const match = sessions.find(s => s.id === roomId);
+      const match = sessions.find(s => s.id === targetHostId);
       if (match) setDjHostName(match.hostName);
     });
-  }, [roomId]);
+  }, [targetHostId]);
 
   const [confirmState, setConfirmState] = useState<{
     isOpen: boolean;
@@ -111,8 +113,8 @@ const ParticipantView: React.FC = () => {
         }
       }
 
-      const urlRoom = new URLSearchParams(window.location.search).get('room');
-      const currentRoom = roomId || urlRoom;
+      const urlRoom = params.get('room');
+      const currentRoom = targetHostId || urlRoom;
 
       const profile = await getUserProfile();
       if (profile) {
@@ -140,11 +142,12 @@ const ParticipantView: React.FC = () => {
     init();
 
     const urlRoom = new URLSearchParams(window.location.search).get('room');
-    const effectiveRoomId = roomId || urlRoom;
+    const effectiveRoomId = targetHostId || urlRoom;
 
-    if (effectiveRoomId) {
+    if (effectiveRoomId && !isInitialized.current) {
       console.log(`[Participant] Initializing sync for room: ${effectiveRoomId}`);
       initializeSync('PARTICIPANT', effectiveRoomId);
+      isInitialized.current = true;
     }
 
     syncService.onConnectionStatus = (status) => {
@@ -494,8 +497,8 @@ const ParticipantView: React.FC = () => {
           </h2>
           <div className="h-1 w-24 bg-gradient-to-r from-transparent via-[var(--neon-cyan)] to-transparent mx-auto opacity-50"></div>
           <p className="text-slate-400 font-righteous tracking-[0.2em] text-xs uppercase leading-relaxed">
-            {syncService.getRoomId() ? (
-              <>Syncing with Room<br /><span className="text-[var(--neon-cyan)] font-bold">{syncService.getRoomId()}</span></>
+            {targetHostId ? (
+              <>Syncing with Room<br /><span className="text-[var(--neon-cyan)] font-bold">{targetHostId}</span></>
             ) : (
               "Waiting for session data..."
             )}
