@@ -2,7 +2,7 @@ import { KaraokeSession, Participant, SongRequest, ParticipantStatus, RequestSta
 import { syncService } from './syncService';
 import { auth, db } from './firebaseConfig';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "firebase/auth";
-import { collection, doc, setDoc, getDoc, updateDoc, deleteDoc, onSnapshot, query, where, getDocs } from "firebase/firestore";
+import { collection, doc, getDoc, updateDoc, setDoc, onSnapshot, query, where, deleteDoc, writeBatch, getDocs } from "firebase/firestore";
 
 const STORAGE_KEY = 'kstar_karaoke_session';
 const PROFILE_KEY = 'kstar_active_user';
@@ -86,7 +86,7 @@ syncService.onPeerConnected = async () => {
 };
 
 async function handleRemoteAction(action: RemoteAction) {
-  console.log(`[SessionManager] Processing remote action: ${action.type} from ${action.senderId}`);
+  console.log(`[SessionManager] Processing remote action: ${action.type} from ${action.senderId} `);
 
   // Many actions modify session state, wrap in serialized update to prevent race conditions
   await runSessionUpdate(async () => {
@@ -171,28 +171,28 @@ async function handleRemoteAction(action: RemoteAction) {
 
 export const initializeSync = async (role: 'DJ' | 'PARTICIPANT', room?: string) => {
   isRemoteClient = role === 'PARTICIPANT' && !!room;
-  console.log(`[SessionManager] Setting up sync. Role: ${role}, Room: ${room || 'New Session'}`);
+  console.log(`[SessionManager] Setting up sync.Role: ${role}, Room: ${room || 'New Session'} `);
   const peerId = await syncService.initialize(role, room);
 
   // Initialize Firebase Realtime Sync for Users if we are the DJ/Host
   if (!isRemoteClient && peerId) {
-    // Register Session
+    // Register Session FIRST to ensure document exists for future updates
     const user = await getUserProfile();
     const hostName = user?.name || "SingMode DJ";
     const hostUid = user?.id;
-
-    // Ensure current local session uses the same ID as the P2P/Global session
-    const currentSession = await getSession();
-    currentSession.id = peerId;
-    await saveSession(currentSession);
 
     await registerSession({
       id: peerId,
       hostName,
       hostUid,
       isActive: true,
-      startedAt: currentSession.startedAt || Date.now()
+      startedAt: Date.now()
     });
+
+    // Ensure current local session uses the same ID as the P2P/Global session
+    const currentSession = await getSession();
+    currentSession.id = peerId;
+    await saveSession(currentSession);
 
     // Heartbeat every 2 minutes
     const heartbeatTimer = setInterval(() => {
@@ -230,7 +230,7 @@ export const initializeSync = async (role: 'DJ' | 'PARTICIPANT', room?: string) 
           session.deviceConnections[idx].status = 'disconnected';
           session.deviceConnections[idx].lastSeen = Date.now();
           await saveSession(session);
-          addSessionLog(`Device disconnected: ${deviceId}`, 'warn');
+          addSessionLog(`Device disconnected: ${deviceId} `, 'warn');
         }
       }
     };
@@ -281,7 +281,7 @@ export const trackDeviceConnection = async (peerId: string) => {
     } else {
       // New Device
       session.deviceConnections.push({
-        id: `D-${Math.random().toString(36).substr(2, 4).toUpperCase()}`,
+        id: `D - ${Math.random().toString(36).substr(2, 4).toUpperCase()} `,
         peerId: peerId,
         connectedAt: Date.now(),
         lastSeen: Date.now(),
@@ -361,11 +361,11 @@ export const saveSession = async (session: KaraokeSession) => {
   if (!isRemoteClient && session.id) {
     try {
       const sessionDoc = doc(db, "sessions", session.id);
-      await updateDoc(sessionDoc, {
+      await setDoc(sessionDoc, {
         fullState: JSON.stringify(session),
         lastHeartbeat: Date.now(),
         participantsCount: session.participants.length
-      });
+      }, { merge: true });
     } catch (e) {
       console.error("[SessionManager] Error persisting full state to Firestore:", e);
     }
@@ -392,7 +392,7 @@ export const getSessionById = async (sessionId: string): Promise<KaraokeSession 
 
     return await Promise.race([fetchPromise, timeoutPromise]);
   } catch (e) {
-    console.error(`[SessionManager] Error fetching session ${sessionId}:`, e);
+    console.error(`[SessionManager] Error fetching session ${sessionId}: `, e);
     return null;
   }
 };
@@ -481,7 +481,7 @@ export const resetSession = async () => {
   const current = await getSession();
   const emptySession: KaraokeSession = {
     ...INITIAL_SESSION,
-    id: `session-${Date.now()}`,
+    id: `session - ${Date.now()} `,
     verifiedSongbook: current.verifiedSongbook, // Persist the songbook
     nextRequestNumber: 1,
     startedAt: Date.now()
@@ -515,8 +515,8 @@ export const getAllAccounts = async (): Promise<UserProfile[]> => {
     }
 
     const seededAccounts: UserProfile[] = Array.from({ length: 5 }, (_, i) => ({
-      id: `singer-${i + 1}`,
-      name: `Singer${i + 1}`,
+      id: `singer - ${i + 1} `,
+      name: `Singer${i + 1} `,
       favorites: [],
       personalHistory: [],
       createdAt: Date.now()
@@ -712,10 +712,10 @@ export const registerUser = async (data: Partial<UserProfile>, autoLogin = false
         return { success: false, error: "Username already taken." };
       }
       // Generate ID
-      uid = activeId() || `user-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+      uid = activeId() || `user - ${Date.now()} -${Math.random().toString(36).substr(2, 5)} `;
     } else {
       // Guest user (no password)
-      uid = data.id || activeId() || `guest-${Math.random().toString(36).substr(2, 9)}`;
+      uid = data.id || activeId() || `guest - ${Math.random().toString(36).substr(2, 9)} `;
     }
 
     const profile: UserProfile = {
@@ -805,7 +805,7 @@ export const loginUser = async (name: string, password?: string): Promise<{ succ
     try {
       // Attempt Firebase Auth Login
       // Construct email from name
-      const email = `${name.replace(/\s+/g, '').toLowerCase()}@singmode.app`;
+      const email = `${name.replace(/\s+/g, '').toLowerCase()} @singmode.app`;
       const credential = await signInWithEmailAndPassword(auth, email, password);
       const uid = credential.user.uid;
 
@@ -888,7 +888,7 @@ export const joinSession = async (profileId: string): Promise<Participant> => {
   const session = await getSession(); // Check ban status on join
   const banRecord = session.bannedUsers?.find((b: any) => b.id === profileId);
   if (banRecord) {
-    throw new Error(`ACCESS DENIED: ${banRecord.reason}`);
+    throw new Error(`ACCESS DENIED: ${banRecord.reason} `);
   }
 
   if (isRemoteClient) {
@@ -1160,7 +1160,7 @@ export const addRequest = async (request: Omit<SongRequest, 'id' | 'createdAt' |
   const userRequests = session.requests.filter(r => r.participantId === request.participantId && r.status === RequestStatus.PENDING);
 
   if (session.maxRequestsPerUser && userRequests.length >= session.maxRequestsPerUser) {
-    throw new Error(`Request limit reached. Max ${session.maxRequestsPerUser} requests allowed per performer.`);
+    throw new Error(`Request limit reached.Max ${session.maxRequestsPerUser} requests allowed per performer.`);
   }
 
   // Duplicate Check: Avoid same song/artist for same user in pending state
@@ -1723,7 +1723,7 @@ export const getActiveSessions = async (): Promise<ActiveSession[]> => {
       const isFresh = data.lastHeartbeat && (now - data.lastHeartbeat < heartbeatLimit);
 
       if (isFresh) {
-        const key = data.hostUid || `${data.hostName}-${data.venueName}`;
+        const key = data.hostUid || `${data.hostName} -${data.venueName} `;
         const existing = sessionMap.get(key);
         if (!existing || (data.lastHeartbeat > existing.lastHeartbeat)) {
           sessionMap.set(key, data);
@@ -1781,7 +1781,7 @@ export const subscribeToSessions = (callback: (sessions: ActiveSession[]) => voi
 
       if (isFresh && isV2Session) {
         // Deduplicate by hostUid or composite key
-        const key = data.hostUid || `${data.hostName}-${data.venueName}`;
+        const key = data.hostUid || `${data.hostName} -${data.venueName} `;
         const existing = sessionMap.get(key);
         if (!existing || (data.lastHeartbeat > existing.lastHeartbeat)) {
           sessionMap.set(key, data);
