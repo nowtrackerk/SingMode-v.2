@@ -53,7 +53,7 @@ const storage = {
     const data = localStorage.getItem(key);
     return data ? JSON.parse(data) : null;
   },
-  set: async (key: string, value: any): Promise<void> => {
+  set: async (key: string, value: any, skipSync = false): Promise<void> => {
     if (isExtension) {
       await (window as any).chrome.storage.local.set({ [key]: value });
     } else {
@@ -61,7 +61,8 @@ const storage = {
     }
     // Always dispatch sync event for both extension and localStorage
     // This ensures DJ console sees updates from local participants
-    if (typeof window !== 'undefined') {
+    // We can skip sync for intermediate metadata updates during a larger session update
+    if (typeof window !== 'undefined' && !skipSync) {
       window.dispatchEvent(new Event('kstar_sync'));
       window.dispatchEvent(new Event('storage'));
     }
@@ -99,10 +100,10 @@ async function handleRemoteAction(action: RemoteAction) {
         const existingIdx = accounts.findIndex(a => a.id === id);
         if (existingIdx === -1) {
           accounts.push(profile);
-          await storage.set(ACCOUNTS_KEY, accounts);
+          await storage.set(ACCOUNTS_KEY, accounts, true);
         } else {
           accounts[existingIdx] = { ...accounts[existingIdx], ...profile };
-          await storage.set(ACCOUNTS_KEY, accounts);
+          await storage.set(ACCOUNTS_KEY, accounts, true);
         }
       }
       await joinSession(id);
@@ -144,7 +145,7 @@ async function handleRemoteAction(action: RemoteAction) {
       } else {
         accounts.push(action.payload);
       }
-      await storage.set(ACCOUNTS_KEY, accounts);
+      await storage.set(ACCOUNTS_KEY, accounts, true);
       break;
     case 'TOGGLE_FAVORITE':
       if (!isRemoteClient) {
@@ -528,7 +529,7 @@ export const updateAccount = async (profileId: string, updates: Partial<UserProf
     const idx = accounts.findIndex(a => a.id === profileId);
     if (idx > -1) {
       accounts[idx] = { ...accounts[idx], ...updates };
-      await storage.set(ACCOUNTS_KEY, accounts);
+      await storage.set(ACCOUNTS_KEY, accounts, true);
 
       const active = await getUserProfile();
       if (active && active.id === profileId) {
@@ -605,7 +606,7 @@ export const deleteAccount = async (profileId: string) => {
     await deleteDoc(doc(db, "users", profileId));
     let accounts = await getAllAccounts();
     accounts = accounts.filter(a => a.id !== profileId);
-    await storage.set(ACCOUNTS_KEY, accounts);
+    await storage.set(ACCOUNTS_KEY, accounts, true);
   } catch (e) {
     console.error("Error deleting account", e);
   }
@@ -648,7 +649,7 @@ export const administrativeCleanup = async () => {
       const snapshot = await getDocs(usersRef);
       const fetchedUsers: UserProfile[] = [];
       snapshot.forEach(doc => fetchedUsers.push(doc.data() as UserProfile));
-      await storage.set(ACCOUNTS_KEY, fetchedUsers);
+      await storage.set(ACCOUNTS_KEY, fetchedUsers, true);
     }
 
     return { success: true, deletedCount: toDelete.length };
@@ -729,11 +730,11 @@ export const registerUser = async (data: Partial<UserProfile>, autoLogin = false
     // Update local cache if not present
     if (!accounts.some(a => a.id === uid)) {
       accounts.push(profile);
-      await storage.set(ACCOUNTS_KEY, accounts);
+      await storage.set(ACCOUNTS_KEY, accounts, true);
     }
 
     if (autoLogin) {
-      await storage.set(PROFILE_KEY, profile);
+      await storage.set(PROFILE_KEY, profile, true);
     } else if (!isRemoteClient) {
       syncService.broadcastAction({ type: 'SYNC_PROFILE', payload: profile, senderId: 'DJ' });
     }
@@ -939,7 +940,7 @@ export const updateVocalRange = async (profileId: string, range: 'Soprano' | 'Al
   const accIdx = accounts.findIndex(a => a.id === profileId);
   if (accIdx > -1) {
     accounts[accIdx].vocalRange = range;
-    await storage.set(ACCOUNTS_KEY, accounts);
+    await storage.set(ACCOUNTS_KEY, accounts, true);
 
     if (!isRemoteClient) {
       syncService.broadcastAction({ type: 'SYNC_PROFILE', payload: accounts[accIdx], senderId: 'DJ' });
@@ -980,7 +981,7 @@ export const toggleFavorite = async (song: Omit<FavoriteSong, 'id'>, specificPro
     } else {
       accounts[accIdx].favorites.push({ ...song, id: Math.random().toString(36).substr(2, 9) });
     }
-    await storage.set(ACCOUNTS_KEY, accounts);
+    await storage.set(ACCOUNTS_KEY, accounts, true);
 
     if (!isRemoteClient) {
       syncService.broadcastAction({ type: 'SYNC_PROFILE', payload: accounts[accIdx], senderId: 'DJ' });
@@ -1170,7 +1171,7 @@ export const addRequest = async (request: Omit<SongRequest, 'id' | 'createdAt' |
     const accIdx = accounts.findIndex(a => a.id === request.participantId);
     if (accIdx > -1) {
       accounts[accIdx].personalHistory = [newRequest, ...accounts[accIdx].personalHistory].slice(0, 50);
-      await storage.set(ACCOUNTS_KEY, accounts);
+      await storage.set(ACCOUNTS_KEY, accounts, true);
       if (!isRemoteClient) {
         syncService.broadcastAction({ type: 'SYNC_PROFILE', payload: accounts[accIdx], senderId: 'DJ' });
       }
@@ -1179,7 +1180,7 @@ export const addRequest = async (request: Omit<SongRequest, 'id' | 'createdAt' |
     const activeStub = await getUserProfile();
     if (activeStub && activeStub.id === request.participantId) {
       const updated = accounts.find(a => a.id === request.participantId);
-      if (updated) await storage.set(PROFILE_KEY, updated);
+      if (updated) await storage.set(PROFILE_KEY, updated, true);
     }
 
     return newRequest;

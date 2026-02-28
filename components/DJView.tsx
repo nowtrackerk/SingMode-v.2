@@ -182,6 +182,7 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const refreshCounter = useRef(0);
 
   // User Manager States
   const [editingProfile, setEditingProfile] = useState<UserProfile | null>(null);
@@ -228,9 +229,12 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
   }, []);
 
   const refresh = useCallback(async () => {
+    const count = ++refreshCounter.current;
     const currentSession = await getSession();
+    if (count !== refreshCounter.current) return;
     setSession(currentSession);
     const allAccounts = await getAllAccounts();
+    if (count !== refreshCounter.current) return;
     setAccounts(allAccounts);
   }, []);
 
