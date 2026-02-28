@@ -98,7 +98,17 @@ const ParticipantView: React.FC = () => {
 
   useEffect(() => {
     const init = async () => {
-      // Check for SINC Login
+      // 1. Initialize Sync FIRST
+      const urlRoom = new URLSearchParams(window.location.search).get('room');
+      const effectiveRoomId = targetHostId || urlRoom;
+
+      if (effectiveRoomId && !isInitialized.current) {
+        console.log(`[Participant] Initializing sync for room: ${effectiveRoomId}`);
+        await initializeSync('PARTICIPANT', effectiveRoomId);
+        isInitialized.current = true;
+      }
+
+      // 2. Handle SINC Login
       const params = new URLSearchParams(window.location.search);
       const sincUserId = params.get('userId');
 
@@ -108,47 +118,38 @@ const ParticipantView: React.FC = () => {
         if (result.success && result.profile) {
           setUserProfile(result.profile);
           setIsLoginMode(false);
-          // Clear param to prevent re-login loop or messy URL
+          // Clear param to prevent re-login loop
           window.history.replaceState({}, '', window.location.pathname + (targetHostId ? `?room=${targetHostId}` : ''));
         }
       }
 
-      const urlRoom = params.get('room');
-      const currentRoom = targetHostId || urlRoom;
-
+      // 3. Load Profile and Auto-Join if needed
       const profile = await getUserProfile();
       if (profile) {
         setUserProfile(profile);
-        const sess = await getSession(currentRoom || undefined);
+        const sess = await getSession(effectiveRoomId || undefined);
         setSession(sess);
         const found = sess.participants.find(p => p.id === profile.id);
-        if (found) {
-          setParticipant(found);
-        } else {
-          console.log(`[Participant] Auto-joining session ${currentRoom} for profile ${profile.id}`);
+        if (!found && effectiveRoomId && sess.id !== 'current-session') {
+          console.log(`[Participant] Auto-joining session ${effectiveRoomId} for profile ${profile.id}`);
           try {
             const newPart = await joinSession(profile.id);
             setParticipant(newPart);
           } catch (e) {
             console.error("Auto-join failed:", e);
           }
+        } else if (found) {
+          setParticipant(found);
         }
       } else {
-        const sess = await getSession(currentRoom || undefined);
+        const sess = await getSession(effectiveRoomId || undefined);
         setSession(sess);
       }
-      refresh();
+
+      // 4. Final Refresh
+      await refresh();
     };
     init();
-
-    const urlRoom = new URLSearchParams(window.location.search).get('room');
-    const effectiveRoomId = targetHostId || urlRoom;
-
-    if (effectiveRoomId && !isInitialized.current) {
-      console.log(`[Participant] Initializing sync for room: ${effectiveRoomId}`);
-      initializeSync('PARTICIPANT', effectiveRoomId);
-      isInitialized.current = true;
-    }
 
     syncService.onConnectionStatus = (status) => {
       setConnectionStatus(status);
@@ -159,7 +160,18 @@ const ParticipantView: React.FC = () => {
       setSession(newState);
       if (userProfile) {
         const found = newState.participants.find(p => p.id === userProfile.id);
-        if (found) setParticipant(found);
+        if (found) {
+          setParticipant(found);
+        } else if (newState.id && newState.id !== 'current-session') {
+          // AUTO-JOIN: If we have a profile but aren't in the participant list yet
+          // Only if we are actually connected to a real session (not the initial placeholder)
+          console.log("[Sync] Participant not found in live session, auto-joining...");
+          joinSession(userProfile.id).then(newPart => {
+            setParticipant(newPart);
+          }).catch(err => {
+            console.error("[Sync] Auto-join failed:", err);
+          });
+        }
       }
     };
 
