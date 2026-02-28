@@ -925,7 +925,7 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
                       </button>
                     </div>
                     <div className="flex flex-col gap-3">
-                      {session.currentRound.map((song, i) => {
+                      {(session.currentRound || []).filter(s => s.status !== RequestStatus.DONE).map((song, i) => {
                         const participant = session.participants.find(p => p.id === song.participantId);
                         const isReady = participant?.status === ParticipantStatus.READY;
                         // Find index of first non-done song

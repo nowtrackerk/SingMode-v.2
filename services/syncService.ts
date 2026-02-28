@@ -1,7 +1,7 @@
 import { Peer, DataConnection } from 'peerjs';
 import { KaraokeSession, RemoteAction } from '../types';
 import { db } from './firebaseConfig';
-import { collection, addDoc } from "firebase/firestore";
+import { collection, addDoc, onSnapshot, query, deleteDoc, doc } from "firebase/firestore";
 
 class SyncService {
   private peer: Peer | null = null;
@@ -11,9 +11,10 @@ class SyncService {
   private isHost: boolean = false;
   private heartbeatInterval: number | null = null;
   private retryCount: number = 0;
-  private maxRetries: number = 20; // Increased retries
+  private maxRetries: number = 20;
   private actionQueue: RemoteAction[] = [];
   private initializationParams: { role: 'DJ' | 'PARTICIPANT', room?: string } | null = null;
+  private unsubscribeActions: (() => void) | null = null;
 
   public onStateReceived: ((state: KaraokeSession) => void) | null = null;
   public onActionReceived: ((action: RemoteAction) => void) | null = null;
@@ -43,7 +44,6 @@ class SyncService {
   private persistQueue() {
     try {
       localStorage.setItem('singmode_pending_actions', JSON.stringify(this.actionQueue));
-      // Notify UI of local queue change
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new Event('kstar_sync'));
       }
@@ -79,8 +79,6 @@ class SyncService {
       return this.peer.id || 'reconnecting';
     }
 
-    // If we've reached here, either we're not initialized or parameters have changed.
-    // Clean up existing peer if it exists before creating a new one with new params.
     if (this.peer && !this.peer.destroyed) {
       console.log("[Sync] Parameters changed or peer state invalid, destroying old peer...");
       this.destroy();
@@ -90,22 +88,14 @@ class SyncService {
     this.isHost = role === 'DJ';
     if (!this.isHost && room) {
       this.hostId = this.sanitizeID(room);
-      console.log(`[Sync] Participant role: Target hostId set to ${this.hostId}`);
     }
 
-    // Step 1: Singleton Lock Enforcement for DJs
     if (this.isHost && !room) {
       const ip = await this.getPublicIP();
       const lockId = this.sanitizeID(`singmode-lock-${btoa(ip).replace(/=/g, '').substr(0, 12)}`);
 
-      console.log(`[Sync] Attempting to claim network lock: ${lockId}`);
-
       const lockAcquired = await new Promise<boolean>((resolve) => {
-        const timeout = setTimeout(() => {
-          console.warn('[Sync] Lock acquisition timed out, proceeding anyway');
-          resolve(true);
-        }, 10000);
-
+        const timeout = setTimeout(() => resolve(true), 10000);
         const tempLock = new Peer(lockId, { debug: 1 });
         tempLock.on('open', () => {
           clearTimeout(timeout);
@@ -114,11 +104,7 @@ class SyncService {
         });
         tempLock.on('error', (err) => {
           clearTimeout(timeout);
-          if (err.type === 'unavailable-id') {
-            resolve(false);
-          } else {
-            resolve(true);
-          }
+          resolve(err.type !== 'unavailable-id');
           tempLock.destroy();
         });
       });
@@ -130,20 +116,15 @@ class SyncService {
 
     return new Promise((resolve, reject) => {
       const id = this.isHost ? (room ? this.sanitizeID(room) : `singmode-${Math.random().toString(36).substr(2, 6)}`) : undefined;
-      console.log(`[Sync] Initializing Peer with ID: ${id || 'auto-generated'} (Role: ${role})`);
 
       const timeout = setTimeout(() => {
-        console.warn('[Sync] Main peer initialization timed out, proceeding anyway');
         const fallbackId = this.isHost ? (room || 'fallback-host') : 'fallback-peer';
-        if (this.isHost) {
-          this.hostId = fallbackId;
-        }
+        if (this.isHost) this.hostId = fallbackId;
         resolve(fallbackId);
       }, 20000);
 
-      // Step 2: Initialize actual Data Peer
       this.peer = new Peer(id, {
-        debug: 3, // Full logs for debugging sync issues
+        debug: 3,
         config: {
           iceServers: [
             { urls: 'stun:stun.l.google.com:19302' },
@@ -160,6 +141,7 @@ class SyncService {
         console.log(`[Sync] Peer opened with ID: ${peerId}`);
         if (this.isHost) {
           this.hostId = peerId;
+          this.subscribeToPendingActions(peerId);
         }
         this.retryCount = 0;
         this.startHeartbeat();
@@ -176,7 +158,7 @@ class SyncService {
       });
 
       this.peer.on('disconnected', () => {
-        console.warn('[Sync] Peer disconnected from signaling server. Attempting reconnect...');
+        console.warn('[Sync] Peer disconnected. Reconnecting...');
         if (this.onConnectionStatus) this.onConnectionStatus('connecting');
         this.peer?.reconnect();
       });
@@ -186,12 +168,10 @@ class SyncService {
       });
 
       this.peer.on('error', (err: any) => {
-        console.error('[Sync] Peer error:', err.type, err);
-
+        console.error('[Sync] Peer error:', err.type);
         if (err.type === 'unavailable-id') {
-          // If a specific room ID was requested and it's taken, reject to let the UI know
           if (room) {
-            reject(new Error(`The session name "${room}" is currently in use. Please try another name or wait a moment.`));
+            reject(new Error(`Session "${room}" is in use.`));
           } else {
             this.destroy();
             this.initialize(role).then(resolve).catch(reject);
@@ -199,8 +179,6 @@ class SyncService {
         } else if (err.type === 'network' || err.type === 'server-error' || err.message?.includes('Lost connection')) {
           if (this.onConnectionStatus) this.onConnectionStatus('disconnected');
           this.handleNetworkError(role, room);
-        } else if (err.type === 'peer-unavailable') {
-          if (this.onConnectionStatus) this.onConnectionStatus('disconnected');
         }
       });
     });
@@ -210,85 +188,53 @@ class SyncService {
     if (this.retryCount < this.maxRetries) {
       this.retryCount++;
       const delay = Math.min(1000 * Math.pow(2, this.retryCount), 30000);
-      console.log(`[Sync] Network failure. Retrying in ${delay}ms... (Attempt ${this.retryCount})`);
-      setTimeout(() => {
-        this.initialize(role, room);
-      }, delay);
+      setTimeout(() => this.initialize(role, room), delay);
     }
   }
 
   private startHeartbeat() {
     if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
-
     this.heartbeatInterval = window.setInterval(() => {
-      if (this.peer && this.peer.disconnected && !this.peer.destroyed) {
-        this.peer.reconnect();
-      }
-      // Keep lock peer alive too if it exists
-      if (this.lockPeer && this.lockPeer.disconnected && !this.lockPeer.destroyed) {
-        this.lockPeer.reconnect();
-      }
+      if (this.peer?.disconnected && !this.peer?.destroyed) this.peer?.reconnect();
+      if (this.lockPeer?.disconnected && !this.lockPeer?.destroyed) this.lockPeer?.reconnect();
     }, 5000);
   }
 
   private connectToHost(hostId: string) {
     if (!this.peer || this.isHost || this.peer.destroyed) return;
-
     if (this.onConnectionStatus) this.onConnectionStatus('connecting');
-
-    const conn = this.peer.connect(hostId, {
-      reliable: true,
-      metadata: { timestamp: Date.now() } // Add metadata for debugging
-    });
-
-    console.log(`[Sync] Connection attempt initiated to host: ${hostId}`);
+    const conn = this.peer.connect(hostId, { reliable: true });
     this.handleConnection(conn);
   }
 
   private handleConnection(conn: DataConnection) {
     conn.on('open', () => {
-      console.log(`[Sync] Data connection established with: ${conn.peer}`);
+      console.log(`[Sync] Connected to: ${conn.peer}`);
       this.connections.set(conn.peer, conn);
-
-      // Process Action Queue if we are a client connecting to host
       if (!this.isHost && this.actionQueue.length > 0) {
-        console.log(`[Sync] Resending ${this.actionQueue.length} queued actions to host.`);
-        this.actionQueue.forEach(action => {
-          conn.send(action);
-        });
-        // Remove: this.actionQueue = []; (Let applyIncomingState handle cleanup once received)
+        this.actionQueue.forEach(a => conn.send(a));
       }
-
       if (this.onConnectionStatus) this.onConnectionStatus('connected');
       if (this.isHost && this.onPeerConnected) this.onPeerConnected();
-
-      // Trigger new device connected event
-      if (this.isHost && this.onDeviceConnected) {
-        this.onDeviceConnected(conn.peer);
-      }
+      if (this.isHost && this.onDeviceConnected) this.onDeviceConnected(conn.peer);
     });
 
-    conn.on('data', (data: unknown) => {
+    conn.on('data', (data: any) => {
       if (data && typeof data === 'object') {
-        if ('type' in data) {
-          const action = { ...(data as RemoteAction), senderId: conn.peer };
-          if (this.onActionReceived) this.onActionReceived(action);
-        } else if ('participants' in data) {
+        if ('type' in data && this.onActionReceived) {
+          this.onActionReceived({ ...data, senderId: conn.peer });
+        } else if ('participants' in data && this.onStateReceived) {
           this.applyIncomingState(data as KaraokeSession);
         }
       }
     });
 
     conn.on('close', () => {
-      console.log(`[Sync] Connection closed: ${conn.peer}`);
       this.connections.delete(conn.peer);
-      if (this.connections.size === 0 && this.onConnectionStatus) {
-        if (!this.isHost) this.onConnectionStatus('disconnected');
+      if (this.connections.size === 0 && this.onConnectionStatus && !this.isHost) {
+        this.onConnectionStatus('disconnected');
       }
-      // Trigger device disconnected event
-      if (this.isHost && this.onDeviceDisconnected) {
-        this.onDeviceDisconnected(conn.peer);
-      }
+      if (this.isHost && this.onDeviceDisconnected) this.onDeviceDisconnected(conn.peer);
     });
 
     conn.on('error', (err) => {
@@ -299,75 +245,60 @@ class SyncService {
 
   broadcastState(state: KaraokeSession) {
     if (!this.isHost) return;
-    this.connections.forEach(conn => {
-      if (conn.open) {
-        conn.send(state);
-      }
-    });
+    this.connections.forEach(conn => { if (conn.open) conn.send(state); });
   }
 
   broadcastAction(action: RemoteAction) {
     if (!this.isHost) return;
-    this.connections.forEach(conn => {
-      if (conn.open) {
-        conn.send(action);
-      }
-    });
+    this.connections.forEach(conn => { if (conn.open) conn.send(action); });
   }
 
   async sendAction(action: RemoteAction) {
     if (this.isHost) return;
 
-    // 1. ALWAYS persist locally first (Robustness Phase)
-    const alreadyQueued = this.actionQueue.some(q =>
-      q.type === action.type &&
-      JSON.stringify(q.payload) === JSON.stringify(action.payload)
-    );
+    const alreadyQueued = this.actionQueue.some(q => q.type === action.type && JSON.stringify(q.payload) === JSON.stringify(action.payload));
 
     if (!alreadyQueued) {
-      console.log('[Sync] Queuing new action locally:', action.type);
       this.actionQueue.push(action);
       this.persistQueue();
 
-      // 2. Buffer to Firestore ASYNCHRONOUSLY (Don't wait for internet)
       if (this.hostId) {
-        collection(db, "sessions", this.hostId, "pending_actions"); // Reference creation is fine
         addDoc(collection(db, "sessions", this.hostId, "pending_actions"), {
           ...action,
           bufferedAt: Date.now()
-        }).then(() => {
-          console.log(`[Sync] Action ${action.type} buffered successfully to Firestore.`);
-        }).catch(e => {
-          console.warn('[Sync] Firestore buffering delayed (will sync when online):', e.message);
-        });
+        }).catch(e => console.warn('[Sync] Firestore buffer delayed:', e.message));
       }
     }
 
-    // 3. Attempt direct transmission if connected
     let sentDirectly = false;
     this.connections.forEach(conn => {
       if (conn.open) {
-        console.log('[Sync] Sending action directly via PeerJS:', action.type);
         conn.send(action);
         sentDirectly = true;
       }
     });
-
-    if (!sentDirectly) {
-      console.log('[Sync] PeerJS connection not open, relying on Firestore buffer for:', action.type);
-    }
+    console.log(sentDirectly ? '[Sync] Action sent via PeerJS' : '[Sync] Action relied on Firestore buffer');
   }
 
-  getRoomId(): string | null {
-    return this.peer ? this.peer.id : null;
-  }
+  getRoomId(): string | null { return this.peer?.id || null; }
+  getMyPeerId(): string | null { return this.peer?.id || null; }
+  getHostId(): string | null { return this.hostId; }
+  getPendingActions(): RemoteAction[] { return this.actionQueue; }
 
-  getMyPeerId(): string | null {
-    return this.peer?.id || null;
-  }
-
-  getHostId(): string | null {
-    return this.hostId;
+  private subscribeToPendingActions(hostId: string) {
+    if (this.unsubscribeActions) this.unsubscribeActions();
+    console.log(`[Sync] Monitoring Firestore: sessions/${hostId}/pending_actions`);
+    const q = query(collection(db, "sessions", hostId, "pending_actions"));
+    this.unsubscribeActions = onSnapshot(q, (snapshot) => {
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === "added") {
+          const action = change.doc.data() as RemoteAction;
+          if (this.onActionReceived) this.onActionReceived(action);
+          deleteDoc(doc(db, "sessions", hostId, "pending_actions", change.doc.id))
+            .catch(e => console.warn("[Sync] Cleanup failed:", e.message));
+        }
+      });
+    });
   }
 
   applyIncomingState(state: KaraokeSession) {
@@ -375,44 +306,25 @@ class SyncService {
       const initialLen = this.actionQueue.length;
       this.actionQueue = this.actionQueue.filter(q => {
         if (q.type === 'ADD_REQUEST') {
-          const payload = q.payload as any;
-          // If this song/artist for this participant is already in session, it reached the host
-          // Robust comparison: trim and lowercase
-          return !state.requests.some(r =>
-            r.participantId === payload.participantId &&
-            r.songName.toLowerCase().trim() === payload.songName.toLowerCase().trim() &&
-            r.artist.toLowerCase().trim() === payload.artist.toLowerCase().trim()
-          );
+          const p = q.payload as any;
+          return !state.requests.some(r => r.participantId === p.participantId && r.songName.toLowerCase().trim() === p.songName.toLowerCase().trim() && r.artist.toLowerCase().trim() === p.artist.toLowerCase().trim());
         }
         return true;
       });
       if (this.actionQueue.length !== initialLen) {
-        console.log(`[Sync] Self-cleaned ${initialLen - this.actionQueue.length} processed actions from queue.`);
         this.persistQueue();
       }
     }
-
     if (this.onStateReceived) this.onStateReceived(state);
-  }
-
-  getPendingActions(): RemoteAction[] {
-    return this.actionQueue;
   }
 
   destroy() {
     if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
     this.connections.forEach(c => c.close());
     this.connections.clear();
-    // Fix: Stop clearing actionQueue here, we want it to persist across re-initializations
-    // this.actionQueue = []; 
-    if (this.peer) {
-      this.peer.destroy();
-      this.peer = null;
-    }
-    if (this.lockPeer) {
-      this.lockPeer.destroy();
-      this.lockPeer = null;
-    }
+    if (this.unsubscribeActions) { this.unsubscribeActions(); this.unsubscribeActions = null; }
+    if (this.peer) { this.peer.destroy(); this.peer = null; }
+    if (this.lockPeer) { this.lockPeer.destroy(); this.lockPeer = null; }
   }
 }
 

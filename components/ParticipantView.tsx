@@ -528,7 +528,7 @@ const ParticipantView: React.FC = () => {
     );
   }
 
-  const myRequests = session.requests.filter(r => r.participantId === participant.id);
+  const myRequests = session.requests.filter(r => r.participantId === participant.id && r.status !== RequestStatus.DONE);
 
   // Rotation Position Logic (Interleaved sorting matching DJ and Rotation Tab)
   const approvedSingingRaw = session.requests.filter(r => r.status === RequestStatus.APPROVED && r.type === RequestType.SINGING && !r.isInRound);
@@ -561,7 +561,7 @@ const ParticipantView: React.FC = () => {
 
   const myFirstInRotation = fullRotation.findIndex(r => r.participantId === participant.id);
   const positionInLine = myFirstInRotation + 1;
-  const isOnStage = session.currentRound?.some(r => r.participantId === participant.id);
+  const isOnStage = (session.currentRound || []).some(r => r.participantId === participant.id && r.status !== RequestStatus.DONE);
 
   return (
     <div className="max-w-2xl mx-auto p-6 space-y-10 relative">
@@ -625,14 +625,14 @@ const ParticipantView: React.FC = () => {
       </header>
 
       {/* Live On Stage - Palm Glow */}
-      {session.currentRound && session.currentRound.length > 0 && (
+      {session.currentRound && session.currentRound.some(s => s.status !== RequestStatus.DONE) && (
         <section className="animate-in fade-in slide-in-from-top-4">
           <div className="flex items-center gap-3 mb-4 px-4">
             <div className="w-2 h-2 bg-[var(--neon-green)] rounded-full animate-blink"></div>
             <h3 className="text-[var(--neon-green)] font-black uppercase tracking-[0.3em] text-base font-righteous">ON STAGE</h3>
           </div>
           <div className="flex flex-col gap-3">
-            {session.currentRound.map((song, i) => (
+            {(session.currentRound || []).filter(s => s.status !== RequestStatus.DONE).map((song, i) => (
               <div
                 key={song.id}
                 className={`p-3 pl-6 pr-4 rounded-xl border-l-8 transition-all duration-300 flex items-center justify-between gap-4 w-full shadow-lg relative overflow-hidden group ${i === 0

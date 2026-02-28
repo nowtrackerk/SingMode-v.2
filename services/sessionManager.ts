@@ -226,22 +226,7 @@ export const initializeSync = async (role: 'DJ' | 'PARTICIPANT', room?: string) 
       }
     };
 
-    // Host Action Buffer Listener: Handle actions sent via Firestore when PeerJS is down
-    const actionsRef = collection(db, "sessions", peerId, "pending_actions");
-    console.log("[SessionManager] Subscribing to Firestore action buffer:", peerId);
-    onSnapshot(actionsRef, (snapshot) => {
-      snapshot.docChanges().forEach(async (change) => {
-        if (change.type === "added") {
-          const action = change.doc.data() as RemoteAction;
-          console.log("[SessionManager] Received buffered action from Firestore:", action.type, "from", action.senderId);
-          await handleRemoteAction(action);
-          // Delete to clear buffer
-          await deleteDoc(change.doc.ref);
-        }
-      });
-    }, (error) => {
-      console.error("[SessionManager] Firestore action buffer subscription error:", error);
-    });
+    // Firestore actions are now handled centrally by syncService.subscribeToPendingActions
   }
 
   // Participants: Setup direct Firestore state subscription as a robust fallback
