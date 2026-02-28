@@ -1238,18 +1238,37 @@ export const markRequestAsDone = async (requestId: string) => {
   if (isRemoteClient) {
     return;
   }
-  await runSessionUpdate((session) => {
+  await runSessionUpdate(async (session) => {
     const req = session.requests.find(r => r.id === requestId);
     if (req) {
       req.status = RequestStatus.DONE;
       req.completedAt = Date.now();
-      // Also update in currentRound if present
+
+      // Update in currentRound if present
       if (session.currentRound) {
         const roundReq = session.currentRound.find(r => r.id === requestId);
         if (roundReq) {
           roundReq.status = RequestStatus.DONE;
           roundReq.completedAt = Date.now();
         }
+      }
+
+      // Update performer's personal history
+      try {
+        const accounts = await getAllAccounts();
+        const accountIdx = accounts.findIndex(a => a.id === req.participantId);
+        if (accountIdx !== -1) {
+          const finishedSong = { ...req, playedAt: Date.now(), isInRound: false, status: RequestStatus.DONE };
+          accounts[accountIdx].personalHistory = [finishedSong, ...accounts[accountIdx].personalHistory].slice(0, 50);
+          await storage.set(ACCOUNTS_KEY, accounts);
+
+          const active = await getUserProfile();
+          if (active && active.id === req.participantId) {
+            await storage.set(PROFILE_KEY, accounts[accountIdx]);
+          }
+        }
+      } catch (e) {
+        console.error("[SessionManager] Error updating participant history in markRequestAsDone:", e);
       }
     }
   });
