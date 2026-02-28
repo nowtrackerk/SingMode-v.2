@@ -109,7 +109,7 @@ const ParticipantView: React.FC = () => {
           setUserProfile(result.profile);
           setIsLoginMode(false);
           // Clear param to prevent re-login loop or messy URL
-          window.history.replaceState({}, '', window.location.pathname + (roomId ? `?room=${roomId}` : ''));
+          window.history.replaceState({}, '', window.location.pathname + (targetHostId ? `?room=${targetHostId}` : ''));
         }
       }
 
