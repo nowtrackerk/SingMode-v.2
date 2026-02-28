@@ -653,7 +653,14 @@ export const administrativeCleanup = async () => {
 };
 
 export const getUserProfile = async (): Promise<UserProfile | null> => {
-  return await storage.get(PROFILE_KEY);
+  const profile = await storage.get(PROFILE_KEY);
+  if (profile) {
+    // Attempt to return the freshest version from our accounts cache
+    const accounts = await getAllAccounts();
+    const fresher = accounts.find(a => a.id === profile.id);
+    if (fresher) return fresher;
+  }
+  return profile;
 };
 
 export const saveUserProfile = async (profile: UserProfile) => {
@@ -1114,7 +1121,13 @@ export const updateParticipantMic = async (participantId: string, enabled: boole
 
 export const addRequest = async (request: Omit<SongRequest, 'id' | 'createdAt' | 'status' | 'isInRound'>): Promise<SongRequest | null> => {
   if (isRemoteClient) {
-    syncService.sendAction({ type: 'ADD_REQUEST', payload: request, senderId: request.participantId });
+    // Generate a client-side ID for robust matching upon state receipt
+    const clientRequestId = Math.random().toString(36).substr(2, 9);
+    syncService.sendAction({
+      type: 'ADD_REQUEST',
+      payload: { ...request, clientRequestId },
+      senderId: request.participantId
+    });
     return null;
   }
 
@@ -1265,6 +1278,10 @@ export const markRequestAsDone = async (requestId: string) => {
           const active = await getUserProfile();
           if (active && active.id === req.participantId) {
             await storage.set(PROFILE_KEY, accounts[accountIdx]);
+          }
+          // Broadcast the updated profile so participants see their history update
+          if (!isRemoteClient) {
+            syncService.broadcastAction({ type: 'SYNC_PROFILE', payload: accounts[accountIdx], senderId: 'DJ' });
           }
         }
       } catch (e) {

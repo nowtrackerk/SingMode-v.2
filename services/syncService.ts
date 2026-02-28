@@ -69,6 +69,12 @@ class SyncService {
 
   async initialize(role: 'DJ' | 'PARTICIPANT', room?: string): Promise<string> {
     if (this.peer && !this.peer.destroyed && !this.peer.disconnected && this.initializationParams?.role === role && this.initializationParams?.room === room) {
+      // Robust check: If we think we are connected but have NO open connections to the host, we MUST attempt to re-establish
+      if (role === 'PARTICIPANT' && room && this.connections.size === 0) {
+        console.log(`[Sync] Redundant initialization detected, but NO active connections. Attempting to reconnect to host...`);
+        this.connectToHost(room);
+        return this.peer.id || 'reconnecting';
+      }
       console.log(`[Sync] Already connected as ${role} to ${room || 'host'}. Skipping redundant init.`);
       return this.peer.id || 'initializing';
     }
@@ -214,9 +220,15 @@ class SyncService {
       if (!this.isHost && this.actionQueue.length > 0) {
         this.actionQueue.forEach(a => conn.send(a));
       }
-      if (this.onConnectionStatus) this.onConnectionStatus('connected');
       if (this.isHost && this.onPeerConnected) this.onPeerConnected();
       if (this.isHost && this.onDeviceConnected) this.onDeviceConnected(conn.peer);
+
+      // Flush queue when connection opens (ensure host gets pending requests)
+      if (!this.isHost) {
+        console.log(`[Sync] Connection to ${conn.peer} opened. Flushing ${this.actionQueue.length} pending actions...`);
+        // Slight delay to ensure PeerJS internal state is fully ready for sending
+        setTimeout(() => this.flushQueue(), 500);
+      }
     });
 
     conn.on('data', (data: any) => {
@@ -270,14 +282,30 @@ class SyncService {
       }
     }
 
-    let sentDirectly = false;
+    this.flushQueue();
+  }
+
+  /**
+   * Re-sends all pending actions to all open connections
+   */
+  public flushQueue() {
+    if (this.isHost || this.actionQueue.length === 0) return;
+
+    let sentCount = 0;
     this.connections.forEach(conn => {
       if (conn.open) {
-        conn.send(action);
-        sentDirectly = true;
+        this.actionQueue.forEach(action => {
+          conn.send(action);
+          sentCount++;
+        });
       }
     });
-    console.log(sentDirectly ? '[Sync] Action sent via PeerJS' : '[Sync] Action relied on Firestore buffer');
+
+    if (sentCount > 0) {
+      console.log(`[Sync] Flushed ${this.actionQueue.length} actions across open connections.`);
+    } else {
+      console.warn(`[Sync] Flush requested but no open connections available.`);
+    }
   }
 
   getRoomId(): string | null { return this.peer?.id || null; }
@@ -307,7 +335,16 @@ class SyncService {
       this.actionQueue = this.actionQueue.filter(q => {
         if (q.type === 'ADD_REQUEST') {
           const p = q.payload as any;
-          return !state.requests.some(r => r.participantId === p.participantId && r.songName.toLowerCase().trim() === p.songName.toLowerCase().trim() && r.artist.toLowerCase().trim() === p.artist.toLowerCase().trim());
+          // Priority 1: Match by clientRequestId (new robust method)
+          if (p.clientRequestId && state.requests.some(r => r.clientRequestId === p.clientRequestId)) {
+            return false;
+          }
+          // Priority 2: Fallback to matching by metadata
+          return !state.requests.some(r =>
+            r.participantId === p.participantId &&
+            r.songName.toLowerCase().trim() === p.songName.toLowerCase().trim() &&
+            r.artist.toLowerCase().trim() === p.artist.toLowerCase().trim()
+          );
         }
         return true;
       });

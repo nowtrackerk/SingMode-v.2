@@ -59,6 +59,7 @@ const ParticipantView: React.FC = () => {
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'connecting'>('connecting');
   const [djHostName, setDjHostName] = useState<string | undefined>(undefined);
   const [pendingActions, setPendingActions] = useState<RemoteAction[]>([]);
+  const [showConnectTimeout, setShowConnectTimeout] = useState(false);
   const isInitialized = useRef(false);
 
   const localPeerId = syncService.getMyPeerId();
@@ -151,6 +152,13 @@ const ParticipantView: React.FC = () => {
     };
     init();
 
+    // Connection Timeout Logic
+    const timeoutTimer = setTimeout(() => {
+      if (!session || !participant) {
+        setShowConnectTimeout(true);
+      }
+    }, 8000);
+
     syncService.onConnectionStatus = (status) => {
       setConnectionStatus(status);
     };
@@ -173,6 +181,7 @@ const ParticipantView: React.FC = () => {
           });
         }
       }
+      setPendingActions(syncService.getPendingActions());
     };
 
     syncService.onActionReceived = (action) => {
@@ -181,6 +190,7 @@ const ParticipantView: React.FC = () => {
     };
 
     return () => {
+      clearTimeout(timeoutTimer);
       syncService.onConnectionStatus = null;
       syncService.onStateReceived = null;
       syncService.onActionReceived = null;
@@ -516,6 +526,35 @@ const ParticipantView: React.FC = () => {
             )}
           </p>
         </div>
+
+        {showConnectTimeout && (
+          <div className="flex flex-col gap-3 w-full max-w-xs animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-300">
+            <button
+              onClick={async () => {
+                setShowConnectTimeout(false);
+                const room = new URLSearchParams(window.location.search).get('room');
+                if (room) {
+                  console.log("[Participant] Manual RECONNECT triggered");
+                  await syncService.initialize('PARTICIPANT', room);
+                  await refresh();
+                } else {
+                  window.location.search = '';
+                }
+              }}
+              className="w-full py-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl text-[var(--neon-cyan)] font-black uppercase tracking-widest text-xs transition-all flex items-center justify-center gap-2"
+            >
+              <span>RECONNECT</span>
+              <div className="w-1.5 h-1.5 rounded-full bg-[var(--neon-cyan)] animate-pulse"></div>
+            </button>
+
+            <button
+              onClick={() => window.location.search = ''}
+              className="w-full py-4 bg-transparent hover:bg-white/5 border border-white/10 rounded-2xl text-slate-500 hover:text-white font-black uppercase tracking-widest text-[10px] transition-all"
+            >
+              CHANGE ROOM
+            </button>
+          </div>
+        )}
 
         {/* Status Indicator */}
         <div className="fixed bottom-12 left-0 right-0 flex justify-center">
@@ -854,9 +893,26 @@ const ParticipantView: React.FC = () => {
                 </div>
               </div>
             ))}
-            {myRequests.length === 0 && (
+            {myRequests.length === 0 && pendingActions.length === 0 && (
               <div className="text-center py-20 bg-black/20 rounded-[3rem] border-2 border-dashed border-white/5">
                 <p className="text-base font-black uppercase tracking-[0.5em] font-righteous text-slate-700">NO REQUESTS</p>
+              </div>
+            )}
+
+            {pendingActions.length > 0 && (
+              <div className="flex justify-center pt-4">
+                <button
+                  onClick={() => {
+                    syncService.flushQueue();
+                    // Visual feedback
+                    setDjHostName("Syncing...");
+                    setTimeout(() => refresh(), 1000);
+                  }}
+                  className="px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl text-[var(--neon-cyan)] font-black uppercase tracking-widest text-[10px] transition-all flex items-center gap-2"
+                >
+                  <span>SYNC QUEUE ({pendingActions.length})</span>
+                  <div className="w-1.5 h-1.5 rounded-full bg-[var(--neon-cyan)] animate-ping"></div>
+                </button>
               </div>
             )}
           </section>

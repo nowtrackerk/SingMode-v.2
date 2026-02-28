@@ -73,6 +73,7 @@ export interface SongRequest {
   message?: string; // Metadata for A.16: User message to DJ
   duetPartnerId?: string; // Metadata for A.12: Duet Partner ID
   duetPartnerName?: string; // Metadata for A.12: Duet Partner Name
+  clientRequestId?: string; // Added for robust client-to-host sync matching
 }
 
 export interface BannedUser {
