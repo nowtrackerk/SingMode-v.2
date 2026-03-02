@@ -191,6 +191,13 @@ export const initializeSync = async (role: 'DJ' | 'PARTICIPANT', room?: string) 
 
   // Initialize Firebase Realtime Sync for Users if we are the DJ/Host
   if (!isRemoteClient && peerId) {
+    // Ensure local session ID matches peerId so Cloud Fallback sync works for Participants
+    const currentSession = await getSession();
+    if (currentSession.id !== peerId) {
+      currentSession.id = peerId;
+      await saveSession(currentSession);
+    }
+
     // Register Session
     const user = await getUserProfile();
     const hostName = user?.name || "SingMode DJ";
