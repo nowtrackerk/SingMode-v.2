@@ -59,6 +59,7 @@ const ParticipantView: React.FC = () => {
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'connecting'>('connecting');
   const [djHostName, setDjHostName] = useState<string | undefined>(undefined);
   const [pendingActions, setPendingActions] = useState<RemoteAction[]>([]);
+  const isInitialized = useRef(false);
 
   const roomId = syncService.getRoomId();
   const roomJoinUrl = getNetworkUrl() + (roomId ? `?room=${roomId}` : '');
@@ -142,9 +143,10 @@ const ParticipantView: React.FC = () => {
     const urlRoom = new URLSearchParams(window.location.search).get('room');
     const effectiveRoomId = roomId || urlRoom;
 
-    if (effectiveRoomId) {
+    if (effectiveRoomId && !isInitialized.current) {
       console.log(`[Participant] Initializing sync for room: ${effectiveRoomId}`);
-      initializeSync('PARTICIPANT', effectiveRoomId);
+      initializeSync('PARTICIPANT', effectiveRoomId).catch(console.error);
+      isInitialized.current = true;
     }
 
     syncService.onConnectionStatus = (status) => {
