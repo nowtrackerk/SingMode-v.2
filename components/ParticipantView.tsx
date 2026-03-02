@@ -107,8 +107,10 @@ const ParticipantView: React.FC = () => {
         if (result.success && result.profile) {
           setUserProfile(result.profile);
           setIsLoginMode(false);
-          // Clear param to prevent re-login loop or messy URL
-          window.history.replaceState({}, '', window.location.pathname + (roomId ? `?room=${roomId}` : ''));
+          // Clear param to prevent re-login loop but preserve the room param
+          const existingRoom = new URLSearchParams(window.location.search).get('room');
+          const finalRoom = syncService.getRoomId() || existingRoom;
+          window.history.replaceState({}, '', window.location.pathname + (finalRoom ? `?room=${finalRoom}` : ''));
         }
       }
 
