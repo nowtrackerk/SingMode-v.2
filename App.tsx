@@ -36,12 +36,10 @@ const App: React.FC = () => {
         // Handle initial role and sync
         if (room || sincUserId) {
           setRole('PARTICIPANT');
-          await initializeSync('PARTICIPANT', room || undefined);
         } else if (view === 'DJ') {
           setRole('DJ');
         } else if (view === 'PARTICIPANT' || view === 'STAGE') {
           setRole('PARTICIPANT');
-          await initializeSync('PARTICIPANT', undefined);
         } else {
           setRole('SELECT');
         }
