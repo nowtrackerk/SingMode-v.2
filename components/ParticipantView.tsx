@@ -38,9 +38,61 @@ const VideoLink: React.FC<{ url?: string }> = ({ url }) => {
 
 
 
+const translations = {
+  en: {
+    rotation: 'STAGE',
+    requests: 'MY SONGS',
+    favorites: 'SONGBOOK',
+    history: 'LOG',
+    vocals: 'MIC SETUP',
+    sing: 'SING!',
+    ready: 'READY',
+    notYet: 'NOT YET',
+    signOut: 'SIGN OUT',
+    comingUp: 'COMING UP',
+    onStage: 'ON STAGE',
+    searchBook: 'SEARCH SONGBOOK...',
+    edit: 'EDIT',
+    cancel: 'CANCEL',
+    noRequests: 'NO REQUESTS',
+    noMatches: 'NO_MATCHES',
+  },
+  es: {
+    rotation: 'ESCENARIO',
+    requests: 'MIS PEDIDOS',
+    favorites: 'CATÁLOGO',
+    history: 'HISTORIAL',
+    vocals: 'CANTANTE',
+    sing: '¡CANTAR!',
+    ready: 'LISTO',
+    notYet: 'ESPERAR',
+    signOut: 'SALIR',
+    comingUp: 'EN LA FILA',
+    onStage: 'EN ESCENARIO',
+    searchBook: 'BUSCAR CANCIÓN...',
+    edit: 'EDITAR',
+    cancel: 'CANCELAR',
+    noRequests: 'SIN PEDIDOS',
+    noMatches: 'SIN COINCIDENCIAS',
+  }
+};
+
 const ParticipantView: React.FC = () => {
+  const [lang, setLang] = useState<'en' | 'es'>(() => (localStorage.getItem('singmode_lang') as 'en' | 'es') || 'en');
+  useEffect(() => {
+    localStorage.setItem('singmode_lang', lang);
+  }, [lang]);
+  const tx = translations[lang];
+
   const [participant, setParticipant] = useState<Participant | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+
+  // Auto-set language for Rosa
+  useEffect(() => {
+    if (userProfile?.name?.toLowerCase() === 'rosa') {
+      setLang('es');
+    }
+  }, [userProfile?.name]);
   const [isLoginMode, setIsLoginMode] = useState(true);
   const [authError, setAuthError] = useState('');
   const [name, setName] = useState('');
@@ -561,8 +613,13 @@ const ParticipantView: React.FC = () => {
         <div className="absolute top-0 inset-x-0 h-32 bg-[var(--neon-purple)]/10 blur-[50px]"></div>
 
         <div className="relative p-8 flex flex-col items-center text-center">
-          <div className="absolute top-6 right-6 z-20">
-            {/* Authorized Node Badge Removed, Sign Out moved here */}
+          <div className="absolute top-6 right-6 z-20 flex flex-col gap-2 items-end">
+            <button
+              onClick={() => setLang(lang === 'en' ? 'es' : 'en')}
+              className="px-3 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-all font-black uppercase text-[10px] tracking-widest font-righteous border border-white/20 hover:border-white/40"
+            >
+              {lang === 'en' ? 'ESPAÑOL' : 'ENGLISH'}
+            </button>
           </div>
 
           <div className="w-24 h-24 p-1 rounded-full border-2 border-white/10 mb-6 relative">
@@ -607,7 +664,7 @@ const ParticipantView: React.FC = () => {
               className="flex items-center gap-2 px-4 py-2 bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white rounded-xl transition-all font-black uppercase text-[10px] tracking-widest font-righteous border border-rose-500/20 hover:border-transparent"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
-              SIGN OUT
+              {tx.signOut}
             </button>
           </div>
 
@@ -619,7 +676,7 @@ const ParticipantView: React.FC = () => {
         <section className="animate-in fade-in slide-in-from-top-4">
           <div className="flex items-center gap-3 mb-4 px-4">
             <div className="w-2 h-2 bg-[var(--neon-green)] rounded-full animate-blink"></div>
-            <h3 className="text-[var(--neon-green)] font-black uppercase tracking-[0.3em] text-base font-righteous">ON STAGE</h3>
+            <h3 className="text-[var(--neon-green)] font-black uppercase tracking-[0.3em] text-base font-righteous">{tx.onStage}</h3>
           </div>
           <div className="flex flex-col gap-3">
             {session.currentRound.map((song, i) => (
@@ -686,10 +743,10 @@ const ParticipantView: React.FC = () => {
             <span className={`text-2xl mb-0.5 ${activeTab === tab ? 'text-[var(--neon-pink)]' : 'grayscale opacity-50'}`}>
               {tab === 'ROTATION' ? '💿' : tab === 'REQUESTS' ? '📼' : tab === 'FAVORITES' ? '⭐' : tab === 'HISTORY' ? '📜' : '🎤'}
             </span>
-            {tab === 'ROTATION' ? 'STAGE' :
-              tab === 'REQUESTS' ? 'MY SONGS' :
-                tab === 'FAVORITES' ? 'SONGBOOK' :
-                  tab === 'HISTORY' ? 'LOG' : 'MIC SETUP'}
+            {tab === 'ROTATION' ? tx.rotation :
+              tab === 'REQUESTS' ? tx.requests :
+                tab === 'FAVORITES' ? tx.favorites :
+                  tab === 'HISTORY' ? tx.history : tx.vocals}
           </button>
         ))}
       </div>
@@ -698,7 +755,7 @@ const ParticipantView: React.FC = () => {
         onClick={() => { setPrefillData(null); setShowRequestForm(true); }}
         className="w-full py-8 bg-gradient-to-r from-[var(--neon-pink)] via-[var(--neon-purple)] to-[var(--neon-blue)] text-white rounded-[2.5rem] font-black text-4xl shadow-[0_0_60px_rgba(255,0,127,0.4)] uppercase tracking-[0.1em] active:scale-95 transition-all font-bungee hover:brightness-110 border-4 border-white/10 animate-pulse"
       >
-        SING!
+        {tx.sing}
       </button>
 
       <div className="flex gap-4 pt-2">
@@ -709,7 +766,7 @@ const ParticipantView: React.FC = () => {
             : 'bg-[#101015] border-white/5 text-slate-700 hover:border-white/10'
             }`}
         >
-          <span className="relative z-10">READY</span>
+          <span className="relative z-10">{tx.ready}</span>
         </button>
 
         <button
@@ -719,7 +776,7 @@ const ParticipantView: React.FC = () => {
             : 'bg-[#101015] border-white/5 text-slate-700 hover:border-white/10'
             }`}
         >
-          <span className="relative z-10">NOT YET</span>
+          <span className="relative z-10">{tx.notYet}</span>
         </button>
       </div>
 
@@ -746,7 +803,7 @@ const ParticipantView: React.FC = () => {
       <main className="min-h-[300px] pb-32">
         {activeTab === 'ROTATION' && (
           <section className="animate-in slide-in-from-bottom-8 duration-500 space-y-6">
-            <h3 className="text-[var(--neon-green)] font-black uppercase tracking-[0.3em] text-sm px-4 font-righteous opacity-80">COMING UP</h3>
+            <h3 className="text-[var(--neon-green)] font-black uppercase tracking-[0.3em] text-sm px-4 font-righteous opacity-80">{tx.comingUp}</h3>
             <div className="space-y-4">
               {(() => {
                 if (fullRotation.length === 0) return (
@@ -837,8 +894,8 @@ const ParticipantView: React.FC = () => {
                           ▼
                         </button>
                       </div>
-                      <button onClick={() => setEditingRequest(req)} className="flex-1 py-3 bg-white/5 hover:bg-white/10 rounded-xl text-sm font-black uppercase tracking-widest transition-all font-righteous text-white">EDIT</button>
-                      <button onClick={async () => { await deleteRequest(req.id); await refresh(); }} className="flex-1 py-3 bg-rose-500/10 hover:bg-rose-500/20 rounded-xl text-sm font-black uppercase tracking-widest transition-all font-righteous text-rose-500">CANCEL</button>
+                      <button onClick={() => setEditingRequest(req)} className="flex-1 py-3 bg-white/5 hover:bg-white/10 rounded-xl text-sm font-black uppercase tracking-widest transition-all font-righteous text-white">{tx.edit}</button>
+                      <button onClick={async () => { await deleteRequest(req.id); await refresh(); }} className="flex-1 py-3 bg-rose-500/10 hover:bg-rose-500/20 rounded-xl text-sm font-black uppercase tracking-widest transition-all font-righteous text-rose-500">{tx.cancel}</button>
                     </div>
                   )}
                 </div>
@@ -846,7 +903,7 @@ const ParticipantView: React.FC = () => {
             ))}
             {myRequests.length === 0 && (
               <div className="text-center py-20 bg-black/20 rounded-[3rem] border-2 border-dashed border-white/5">
-                <p className="text-base font-black uppercase tracking-[0.5em] font-righteous text-slate-700">NO REQUESTS</p>
+                <p className="text-base font-black uppercase tracking-[0.5em] font-righteous text-slate-700">{tx.noRequests}</p>
               </div>
             )}
           </section>
@@ -857,7 +914,7 @@ const ParticipantView: React.FC = () => {
             <div className="relative group">
               <input
                 type="text"
-                placeholder="SEARCH SONGBOOK..."
+                placeholder={tx.searchBook}
                 value={librarySearchQuery}
                 onChange={(e) => setLibrarySearchQuery(e.target.value)}
                 className="w-full bg-[#101015] border-2 border-white/10 rounded-[2rem] py-5 px-6 pl-14 text-xl font-bold uppercase tracking-wider text-white focus:outline-none focus:border-[var(--neon-pink)] transition-all font-righteous placeholder:text-slate-600 shadow-inner"
@@ -874,7 +931,7 @@ const ParticipantView: React.FC = () => {
                     .map(v => ({ ...v, isFavorite: false }))
                 ].filter(song => !librarySearchQuery || song.songName.toLowerCase().includes(librarySearchQuery.toLowerCase()) || song.artist.toLowerCase().includes(librarySearchQuery.toLowerCase()));
 
-                if (combined.length === 0) return <div className="text-center py-20 opacity-30 font-righteous text-sm uppercase tracking-widest text-slate-500">NO_MATCHES</div>;
+                if (combined.length === 0) return <div className="text-center py-20 opacity-30 font-righteous text-sm uppercase tracking-widest text-slate-500">{tx.noMatches}</div>;
 
                 return combined.map(song => (
                   <div key={song.id} className="bg-[#101015] p-5 rounded-[2rem] flex justify-between items-center group border-2 border-white/5 hover:border-[var(--neon-yellow)] transition-all">
