@@ -12,6 +12,8 @@ import {
 import SongRequestForm from './SongRequestForm';
 import { syncService } from '../services/syncService';
 import { getNetworkUrl } from '../services/networkUtils';
+import { auth, db } from '../services/firebaseConfig';
+import { onSnapshot, doc } from 'firebase/firestore';
 import SessionList from './SessionList';
 import VocalFxPanel from './VocalFxPanel';
 import { SingModeLogo } from './common/SingModeLogo';
@@ -149,6 +151,25 @@ const ParticipantView: React.FC = () => {
       console.log(`[Participant] Initializing sync for room: ${effectiveRoomId}`);
       initializeSync('PARTICIPANT', effectiveRoomId).catch(console.error);
       isInitialized.current = true;
+
+      // Subscribe to Cloud Fallback state for Cloud-Only users
+      const unsub = onSnapshot(doc(db, "sessions", effectiveRoomId), (doc) => {
+        if (doc.exists()) {
+          const cloudData = doc.data();
+          if (cloudData.fullState) {
+            try {
+              const fullSess = JSON.parse(cloudData.fullState);
+              // Tell sync service to apply it so queues evaluate and events fire
+              syncService.applyIncomingState(fullSess);
+            } catch (e) {
+              console.warn("Failed to parse Cloud Fallback state", e);
+            }
+          }
+        }
+      });
+
+      // Cleanup listener on unmount
+      return () => unsub();
     }
 
     syncService.onConnectionStatus = (status) => {
