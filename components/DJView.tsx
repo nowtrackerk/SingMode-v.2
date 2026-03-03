@@ -1768,9 +1768,32 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
 
             <div className="space-y-4 mb-10 max-h-[400px] overflow-y-auto pr-4 custom-scrollbar">
               {(() => {
-                const singingParticipants = session.participants
-                  .filter(p => session.requests?.some(r => r.participantId === p.id && r.status === RequestStatus.APPROVED && r.type === RequestType.SINGING && !r.isInRound))
-                  .sort((a, b) => (b.joinedAt || 0) - (a.joinedAt || 0)); // Visual sort, actual sort happens in generateRound
+                let singingParticipants = session.participants
+                  .filter(p => session.requests?.some(r => r.participantId === p.id && r.status === RequestStatus.APPROVED && r.type === RequestType.SINGING && !r.isInRound));
+
+                // Apply strategy-based sort for Review Lineup display to match actual round generation
+                const strategy = session.queueStrategy || QueueStrategy.FRESH_MEAT;
+                singingParticipants = [...singingParticipants].sort((a, b) => {
+                  const pendingA = session.requests?.filter(r => r.participantId === a.id && r.status === RequestStatus.APPROVED && r.type === RequestType.SINGING && !r.isInRound) || [];
+                  const pendingB = session.requests?.filter(r => r.participantId === b.id && r.status === RequestStatus.APPROVED && r.type === RequestType.SINGING && !r.isInRound) || [];
+
+                  if (strategy === QueueStrategy.FRESH_MEAT) return (b.joinedAt || 0) - (a.joinedAt || 0);
+                  if (strategy === QueueStrategy.OLDEST_MEMBER) return (a.joinedAt || 0) - (b.joinedAt || 0);
+                  if (strategy === QueueStrategy.FAIR_ROTATION) {
+                    const countA = session.requests?.filter(r => r.participantId === a.id && r.status === RequestStatus.DONE).length || 0;
+                    const countB = session.requests?.filter(r => r.participantId === b.id && r.status === RequestStatus.DONE).length || 0;
+                    if (countA !== countB) return countA - countB;
+                    const timeA = pendingA.sort((x, y) => x.createdAt - y.createdAt)[0]?.createdAt || Date.now();
+                    const timeB = pendingB.sort((x, y) => x.createdAt - y.createdAt)[0]?.createdAt || Date.now();
+                    return timeA - timeB; // Earliest request first
+                  }
+                  if (strategy === QueueStrategy.FIFO) {
+                    const timeA = pendingA.sort((x, y) => x.createdAt - y.createdAt)[0]?.createdAt || Date.now();
+                    const timeB = pendingB.sort((x, y) => x.createdAt - y.createdAt)[0]?.createdAt || Date.now();
+                    return timeA - timeB;
+                  }
+                  return 0; // Random fallback
+                });
 
                 // If we have singers, show them
                 if (singingParticipants.length > 0) {
