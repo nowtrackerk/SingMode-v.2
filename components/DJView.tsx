@@ -969,9 +969,14 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
 
                               {/* Main Info */}
                               <div className="flex items-baseline gap-6 min-w-0 flex-1">
-                                <h3 className={`text-2xl font-black uppercase font-righteous tracking-tight leading-tight ${isActive ? 'text-white' : 'text-slate-300'}`}>
+                                <a
+                                  href={song.youtubeUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className={`text-2xl font-black uppercase font-righteous tracking-tight leading-tight hover:underline ${isActive ? 'text-white' : 'text-slate-300'}`}
+                                >
                                   {song.songName}
-                                </h3>
+                                </a>
                                 <div className="flex items-center gap-3 opacity-80 shrink-0">
                                   <span className="text-xl font-bold font-righteous text-[var(--neon-cyan)] uppercase tracking-wider">{song.artist}</span>
                                   <span className="text-slate-600 font-mono text-lg">/</span>

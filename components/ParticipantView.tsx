@@ -570,9 +570,10 @@ const ParticipantView: React.FC = () => {
     );
   }
 
-  const myRequests = session.requests.filter(r => r.participantId === participant.id);
+  const myRequests = session.requests.filter(r => r.participantId === participant.id && r.status !== RequestStatus.DONE);
 
   // Rotation Position Logic (Interleaved sorting matching DJ and Rotation Tab)
+  // Ensure we EXCLUDE songs that are DONE so they disappear from "Coming Up" as well.
   const approvedSingingRaw = session.requests.filter(r => r.status === RequestStatus.APPROVED && r.type === RequestType.SINGING && !r.isInRound);
   const participantsWithSongs = session.participants.filter(p => approvedSingingRaw.some(r => r.participantId === p.id))
     .sort((a, b) => (b.joinedAt || 0) - (a.joinedAt || 0));
@@ -672,14 +673,14 @@ const ParticipantView: React.FC = () => {
       </header>
 
       {/* Live On Stage - Palm Glow */}
-      {session.currentRound && session.currentRound.length > 0 && (
+      {session.currentRound && session.currentRound.filter(s => s.status !== RequestStatus.DONE).length > 0 && (
         <section className="animate-in fade-in slide-in-from-top-4">
           <div className="flex items-center gap-3 mb-4 px-4">
             <div className="w-2 h-2 bg-[var(--neon-green)] rounded-full animate-blink"></div>
             <h3 className="text-[var(--neon-green)] font-black uppercase tracking-[0.3em] text-base font-righteous">{tx.onStage}</h3>
           </div>
           <div className="flex flex-col gap-3">
-            {session.currentRound.map((song, i) => (
+            {session.currentRound.filter(s => s.status !== RequestStatus.DONE).map((song, i) => (
               <div
                 key={song.id}
                 className={`p-3 pl-6 pr-4 rounded-xl border-l-8 transition-all duration-300 flex items-center justify-between gap-4 w-full shadow-lg relative overflow-hidden group ${i === 0
