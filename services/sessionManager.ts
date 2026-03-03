@@ -1,7 +1,7 @@
 import { KaraokeSession, Participant, SongRequest, ParticipantStatus, RequestStatus, UserProfile, FavoriteSong, RequestType, ChatMessage, TickerMessage, RemoteAction, VerifiedSong, ActiveSession, QueueStrategy } from '../types';
 import { syncService } from './syncService';
 import { auth, db } from './firebaseConfig';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "firebase/auth";
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, signInAnonymously } from "firebase/auth";
 import { collection, doc, setDoc, getDoc, updateDoc, deleteDoc, onSnapshot, query, where, getDocs } from "firebase/firestore";
 
 const STORAGE_KEY = 'kstar_karaoke_session';
@@ -870,6 +870,16 @@ export const loginUserById = async (userId: string): Promise<{ success: boolean,
   }
 
   if (found) {
+    // Authenticate device so it can write to Firestore fallback queues
+    if (!auth.currentUser) {
+      try {
+        await signInAnonymously(auth);
+        console.log("Device authenticated anonymously for SINC login");
+      } catch (e) {
+        console.warn("Failed to sign in anonymously on device:", e);
+      }
+    }
+
     await storage.set(PROFILE_KEY, found);
     return { success: true, profile: found };
   }
