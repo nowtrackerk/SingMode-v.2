@@ -191,13 +191,30 @@ const ParticipantView: React.FC = () => {
       } else {
         const sess = await getSession(currentRoom || undefined);
         setSession(sess);
+
+        // Auto-login as Guest if they arrived via generic QR code
+        if (urlRoom && !sincUserId) {
+          console.log(`[Participant] Auto-generating Guest pass for QR scan...`);
+          try {
+            const guestName = `Guest-${Math.floor(Math.random() * 10000)}`;
+            const result = await registerUser({ name: guestName }, true);
+            if (result.success && result.profile) {
+              setUserProfile(result.profile);
+              const newPart = await joinSession(result.profile.id);
+              setParticipant(newPart);
+              await updateParticipantStatus(result.profile.id, ParticipantStatus.READY);
+            }
+          } catch (e) {
+            console.error("Auto-guest login failed:", e);
+          }
+        }
       }
       refresh();
     };
     init();
 
-    const urlRoom = new URLSearchParams(window.location.search).get('room');
-    const effectiveRoomId = roomId || urlRoom;
+    const urlRoomStr = new URLSearchParams(window.location.search).get('room');
+    const effectiveRoomId = roomId || urlRoomStr;
 
     if (effectiveRoomId && !isInitialized.current) {
       console.log(`[Participant] Initializing sync for room: ${effectiveRoomId}`);
