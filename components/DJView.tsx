@@ -10,7 +10,8 @@ import {
   addUserFavorite, getUserProfile, setStageVideoPlaying, rotateStageSong, completeStageSong,
   resetSession, removeUserHistoryItem, updateUserHistoryItem,
   addVerifiedSong, updateVerifiedSong, deleteVerifiedSong,
-  reorderCurrentRound, reorderRequests, reorderPendingRequests,
+  reorderCurrentRound, reorderRequests, reorderPendingRequests, setRoundOrder, setRequestsOrder, setParticipantsOrder,
+  reorderUserRequests,
   banUser, setMaxRequestsPerUser, markRequestAsDone, logoutUser,
   assignUserToDevice, removeDevice, setQueueStrategy, unregisterSession, subscribeToSessions,
   administrativeCleanup, getSessionHistory, initializeSync
@@ -496,9 +497,9 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
   };
 
   const [draggedItemIndex, setDraggedItemIndex] = useState<number | null>(null);
-  const [draggedListType, setDraggedListType] = useState<'ROUND' | 'QUEUE' | 'PENDING' | null>(null);
+  const [draggedListType, setDraggedListType] = useState<'ROUND' | 'QUEUE' | 'PENDING' | 'PERFORMERS' | 'USER_QUEUE' | null>(null);
 
-  const handleDragStart = (e: React.DragEvent, index: number, type: 'ROUND' | 'QUEUE' | 'PENDING') => {
+  const handleDragStart = (e: React.DragEvent, index: number, type: 'ROUND' | 'QUEUE' | 'PENDING' | 'PERFORMERS' | 'USER_QUEUE') => {
     setDraggedItemIndex(index);
     setDraggedListType(type);
     e.dataTransfer.effectAllowed = 'move';
@@ -509,7 +510,7 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
     e.dataTransfer.dropEffect = 'move';
   };
 
-  const handleDrop = async (e: React.DragEvent, targetIndexUI: number, type: 'ROUND' | 'QUEUE' | 'PENDING') => {
+  const handleDrop = async (e: React.DragEvent, targetIndexUI: number, type: 'ROUND' | 'QUEUE' | 'PENDING' | 'PERFORMERS' | 'USER_QUEUE') => {
     e.preventDefault();
     if (draggedItemIndex === null || draggedListType !== type) return;
 
@@ -517,19 +518,35 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
       const items = Array.from(session.currentRound);
       const [reorderedItem] = items.splice(draggedItemIndex, 1);
       items.splice(targetIndexUI, 0, reorderedItem);
-      await reorderCurrentRound(items);
+      await setRoundOrder(items.map(i => i.id));
+      syncService.broadcastAction({ type: 'SET_ROUND_ORDER', payload: items.map(i => i.id), senderId: syncService.getRoomId() || '' });
     } else if (type === 'QUEUE') {
       const list = approvedSinging;
       const items = Array.from(list);
       const [reorderedItem] = items.splice(draggedItemIndex, 1);
       items.splice(targetIndexUI, 0, reorderedItem);
-      await reorderRequests(items);
+      await setRequestsOrder(items.map(i => i.id));
+      syncService.broadcastAction({ type: 'SET_REQUESTS_ORDER', payload: items.map(i => i.id), senderId: syncService.getRoomId() || '' });
     } else if (type === 'PENDING') {
       const list = pendingRequests;
       const items = Array.from(list);
       const [reorderedItem] = items.splice(draggedItemIndex, 1);
       items.splice(targetIndexUI, 0, reorderedItem);
-      await reorderPendingRequests(items);
+      // Pending requests order if needed (falling back to simple reorderRequests if implemented, or omitted)
+    } else if (type === 'PERFORMERS') {
+      const list = session.participants;
+      const items = Array.from(list);
+      const [reorderedItem] = items.splice(draggedItemIndex, 1);
+      items.splice(targetIndexUI, 0, reorderedItem);
+      await setParticipantsOrder(items.map(i => i.id));
+      syncService.broadcastAction({ type: 'SET_PARTICIPANTS_ORDER', payload: items.map(i => i.id), senderId: syncService.getRoomId() || '' });
+    } else if (type === 'USER_QUEUE' && managedProfile) {
+      const list = session.requests.filter(r => r.participantId === managedProfile.id && r.status === RequestStatus.APPROVED && r.type === RequestType.SINGING && !r.isInRound);
+      const items = Array.from(list);
+      const [reorderedItem] = items.splice(draggedItemIndex, 1);
+      items.splice(targetIndexUI, 0, reorderedItem);
+      await reorderUserRequests(managedProfile.id, items.map(i => i.id));
+      syncService.broadcastAction({ type: 'REORDER_USER_REQUESTS', payload: { participantId: managedProfile.id, orderedIds: items.map(i => i.id) }, senderId: syncService.getRoomId() || '' });
     }
 
     setDraggedItemIndex(null);
@@ -649,8 +666,7 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
 
   // Custom Interleaved Sorting Logic for Ready Nodes
   const approvedSingingRaw = session.requests.filter(r => r.status === RequestStatus.APPROVED && r.type === RequestType.SINGING && !r.isInRound);
-  const participantsWithSongs = session.participants.filter(p => approvedSingingRaw.some(r => r.participantId === p.id))
-    .sort((a, b) => (b.joinedAt || 0) - (a.joinedAt || 0)); // Rank by Newest First
+  const participantsWithSongs = session.participants.filter(p => approvedSingingRaw.some(r => r.participantId === p.id)); // Rank respects exact array order from PERFORMERS list
 
   const requestsByParticipant: { [key: string]: SongRequest[] } = {};
   approvedSingingRaw.forEach(r => {
@@ -943,6 +959,10 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
                         return (
                           <div
                             key={song.id}
+                            draggable={song.status !== RequestStatus.DONE}
+                            onDragStart={(e) => handleDragStart(e, i, 'ROUND')}
+                            onDragOver={handleDragOver}
+                            onDrop={(e) => handleDrop(e, i, 'ROUND')}
                             className={`p-3 pl-6 pr-4 rounded-xl border-l-8 transition-all duration-300 flex items-center justify-between gap-4 w-full shadow-lg relative overflow-hidden group ${isActive
                               ? 'bg-[#001005] border-l-[var(--neon-green)] border-y border-r border-[#1a3320] z-10 scale-[1.01]'
                               : 'bg-[#0a0a10] border-l-slate-700 border-y border-r border-white/10 opacity-70 hover:opacity-100'
@@ -1133,11 +1153,7 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-4 shrink-0">
-                          <div className="flex flex-col gap-0.5 px-2">
-                            <button onClick={async () => { await reorderRequest(req.id, 'up'); await refresh(); }} className="text-slate-700 hover:text-white transition-colors p-1 text-base">▲</button>
-                            <button onClick={async () => { await reorderRequest(req.id, 'down'); await refresh(); }} className="text-slate-700 hover:text-white transition-colors p-1 text-base">▼</button>
-                          </div>
+                        <div className="flex items-center gap-4 shrink-0 cursor-default">
                           <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <CopyButton request={req} />
                             <YouTubeSearchButton request={req} />
@@ -1293,13 +1309,20 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
                   </div>
                 </div>
                 <div className="space-y-3 overflow-y-auto custom-scrollbar pr-2 flex-1">
-                  {session.participants.map(p => {
+                  {session.participants.map((p, i) => {
                     const isReady = p.status === ParticipantStatus.READY;
                     const requests = session.requests.filter(r => r.participantId === p.id);
                     const approvedCount = requests.filter(r => r.status === RequestStatus.APPROVED && r.type === RequestType.SINGING).length;
 
                     return (
-                      <div key={p.id} className={`flex items-center justify-between p-4 rounded-[1.5rem] transition-all border ${isReady ? 'bg-[#002a1a]/30 border-[var(--neon-green)] shadow-[0_0_15px_rgba(0,255,157,0.2)]' : 'bg-black/40 border-white/5 hover:bg-white/5'}`}>
+                      <div
+                        key={p.id}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, i, 'PERFORMERS')}
+                        onDragOver={handleDragOver}
+                        onDrop={(e) => handleDrop(e, i, 'PERFORMERS')}
+                        className={`flex items-center justify-between p-4 rounded-[1.5rem] transition-all border cursor-move ${isReady ? 'bg-[#002a1a]/30 border-[var(--neon-green)] shadow-[0_0_15px_rgba(0,255,157,0.2)]' : 'bg-black/40 border-white/5 hover:bg-white/5'} ${draggedItemIndex === i && draggedListType === 'PERFORMERS' ? 'opacity-50 ring-2 ring-[var(--neon-cyan)]' : ''}`}
+                      >
                         <div className="min-w-0 flex items-center gap-4">
                           <button
                             onClick={async () => { await updateParticipantStatus(p.id, isReady ? ParticipantStatus.STANDBY : ParticipantStatus.READY); await refresh(); }}
@@ -1389,6 +1412,10 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
                       return (
                         <div
                           key={song.id}
+                          draggable={song.status !== RequestStatus.DONE}
+                          onDragStart={(e) => handleDragStart(e, i, 'ROUND')}
+                          onDragOver={handleDragOver}
+                          onDrop={(e) => handleDrop(e, i, 'ROUND')}
                           className={`p-3 pl-6 pr-4 rounded-xl border-l-8 transition-all duration-300 flex items-center justify-between gap-4 w-full shadow-lg relative overflow-hidden group ${isActive
                             ? 'bg-[#001005] border-l-[var(--neon-green)] border-y border-r border-[#1a3320] z-10 scale-[1.01]'
                             : 'bg-[#0a0a10] border-l-slate-700 border-y border-r border-white/10 opacity-70 hover:opacity-100'
@@ -1644,11 +1671,20 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
                     placeholder="SEARCH SONGBOOK..."
                     value={librarySearchQuery}
                     onChange={(e) => setLibrarySearchQuery(e.target.value)}
-                    className="w-full bg-black/50 border-2 border-white/10 rounded-[2.3rem] py-6 pl-16 pr-32 text-2xl font-bold tracking-widest text-white placeholder:text-slate-600 focus:outline-none focus:border-[var(--neon-pink)] transition-all font-righteous uppercase"
+                    className="w-full bg-black/50 border-2 border-white/10 rounded-[2.3rem] py-6 pl-16 pr-40 text-2xl font-bold tracking-widest text-white placeholder:text-slate-600 focus:outline-none focus:border-[var(--neon-pink)] transition-all font-righteous uppercase"
                   />
                   <span className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-[var(--neon-pink)] transition-colors pointer-events-none">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                   </span>
+                  {librarySearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setLibrarySearchQuery('')}
+                      className="absolute right-[140px] top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors p-2"
+                    >
+                      ✕
+                    </button>
+                  )}
                   <div className="absolute right-3 top-1/2 -translate-y-1/2 flex gap-2">
                     <button
                       onClick={() => setIsAddingVerifiedSong(true)}
@@ -2049,7 +2085,13 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
                           </div>
 
                           <div className="w-full mt-10 space-y-3">
-                            <button onClick={() => startChangePassword(managedProfile)} className="w-full py-3 bg-black border border-white/10 hover:border-[var(--neon-pink)] text-white rounded-xl text-sm font-black uppercase tracking-widest transition-all font-righteous">CHANGE PASSWORD</button>
+                            <button
+                              onClick={() => setPickingSongForUser(managedProfile)}
+                              className="w-full py-4 bg-[var(--neon-pink)] text-black rounded-xl text-sm font-black uppercase tracking-widest transition-all shadow-[0_0_20px_rgba(255,42,109,0.4)] font-righteous hover:bg-white hover:scale-[1.02]"
+                            >
+                              + ADD SONG FOR SINGER
+                            </button>
+                            <button onClick={() => startChangePassword(managedProfile)} className="w-full py-3 bg-black border border-white/10 hover:border-[var(--neon-pink)] text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all font-righteous">CHANGE PIN</button>
                             <button onClick={async () => {
                               setQrTargetUser(managedProfile);
                               setShowQrModal(true);
@@ -2066,6 +2108,36 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
                     </div>
 
                     <div className="lg:col-span-8 space-y-6">
+                      {(() => {
+                        const userRequests = session.requests.filter(r => r.participantId === managedProfile.id && r.status === RequestStatus.APPROVED && r.type === RequestType.SINGING && !r.isInRound);
+                        if (userRequests.length === 0) return null;
+                        return (
+                          <div className="bg-[#101015] border-2 border-[var(--neon-green)] shadow-[0_0_20px_rgba(0,255,157,0.1)] rounded-[2.5rem] p-8 relative overflow-hidden">
+                            <h4 className="text-sm font-black text-[var(--neon-green)] uppercase tracking-[0.3em] mb-6 font-righteous">APPROVED QUEUE ({userRequests.length})</h4>
+                            <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                              {userRequests.map((req, i) => (
+                                <div
+                                  key={req.id}
+                                  draggable
+                                  onDragStart={(e) => handleDragStart(e, i, 'USER_QUEUE')}
+                                  onDragOver={handleDragOver}
+                                  onDrop={(e) => handleDrop(e, i, 'USER_QUEUE')}
+                                  className={`bg-black/40 border border-white/5 p-4 rounded-xl flex justify-between items-center group hover:border-[var(--neon-green)] transition-all cursor-move ${draggedItemIndex === i && draggedListType === 'USER_QUEUE' ? 'opacity-50 ring-2 ring-[var(--neon-cyan)]' : ''}`}
+                                >
+                                  <div className="min-w-0 pr-4">
+                                    <div className="text-xl font-black text-white truncate uppercase tracking-tight font-righteous group-hover:text-[var(--neon-green)] transition-colors">{req.songName}</div>
+                                    <div className="text-sm text-slate-500 font-bold uppercase tracking-widest mt-0.5 font-righteous opacity-60">{req.artist}</div>
+                                  </div>
+                                  <div className="flex gap-2 shrink-0">
+                                    <button onClick={() => setRequestToEdit(req)} className="p-2 text-slate-700 hover:text-white transition-colors">✏️</button>
+                                    <button onClick={() => { askConfirm('Remove completely?', async () => { await deleteRequest(req.id); await refresh(); }); }} className="p-2 text-rose-500/30 hover:text-rose-500 transition-colors">✕</button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()}
                       <div className="grid md:grid-cols-2 gap-6">
                         <div className="bg-[#101015] border-2 border-white/5 rounded-[2.5rem] p-8 relative overflow-hidden">
                           <h4 className="text-sm font-black text-[var(--neon-pink)] uppercase tracking-[0.3em] mb-6 font-righteous">LIBRARY STARS ({managedProfile.favorites.length})</h4>
@@ -2383,6 +2455,7 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
                     onSubmit={handleManualRequestSubmit}
                     onCancel={closeModals}
                     participants={session.participants}
+                    suggestions={session.verifiedSongbook || []}
                   />
                 );
               })()}

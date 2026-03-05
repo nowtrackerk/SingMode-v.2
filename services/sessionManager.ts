@@ -3,6 +3,7 @@ import { syncService } from './syncService';
 import { auth, db } from './firebaseConfig';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, signInAnonymously } from "firebase/auth";
 import { collection, doc, setDoc, getDoc, updateDoc, deleteDoc, onSnapshot, query, where, getDocs } from "firebase/firestore";
+import { get, set } from 'idb-keyval';
 
 const STORAGE_KEY = 'kstar_karaoke_session';
 const PROFILE_KEY = 'kstar_active_user';
@@ -50,6 +51,12 @@ const storage = {
       const result = await (window as any).chrome.storage.local.get([key]);
       return result[key];
     }
+    try {
+      const idbData = await get(key);
+      if (idbData !== undefined) return idbData;
+    } catch (e) { console.warn('IDB get failed', e); }
+
+    // Fallback to localStorage
     const data = localStorage.getItem(key);
     return data ? JSON.parse(data) : null;
   },
@@ -57,7 +64,13 @@ const storage = {
     if (isExtension) {
       await (window as any).chrome.storage.local.set({ [key]: value });
     } else {
-      localStorage.setItem(key, JSON.stringify(value));
+      try {
+        await set(key, value);
+      } catch (e) { console.warn('IDB set failed', e); }
+      // Always fallback to local storage for secondary resilience
+      try {
+        localStorage.setItem(key, JSON.stringify(value));
+      } catch (e) { }
     }
     // Always dispatch sync event for both extension and localStorage
     // This ensures DJ console sees updates from local participants
@@ -174,8 +187,20 @@ async function handleRemoteAction(action: RemoteAction) {
       case 'REORDER_ROUND':
         await reorderCurrentRound(action.payload);
         break;
+      case 'SET_ROUND_ORDER':
+        await setRoundOrder(action.payload);
+        break;
       case 'REORDER_REQUESTS':
         await reorderRequests(action.payload);
+        break;
+      case 'SET_REQUESTS_ORDER':
+        await setRequestsOrder(action.payload);
+        break;
+      case 'SET_PARTICIPANTS_ORDER':
+        await setParticipantsOrder(action.payload);
+        break;
+      case 'REORDER_USER_REQUESTS':
+        await reorderUserRequests(action.payload.participantId, action.payload.orderedIds);
         break;
       case 'REORDER_PENDING':
         await reorderPendingRequests(action.payload);
@@ -1342,6 +1367,88 @@ export const reorderRequest = async (requestId: string, direction: 'up' | 'down'
     session.requests[newIndex] = temp;
     await saveSession(session);
   }
+};
+
+export const setRequestsOrder = async (orderedIds: string[]) => {
+  const session = await getSession();
+  const newRequests = [...session.requests];
+  const reordered: any[] = [];
+  const others: any[] = [];
+
+  // Group items
+  const pendingRequests = session.requests.filter(r => r.status === RequestStatus.APPROVED && r.type === RequestType.SINGING && !r.isInRound);
+  const remainingReqs = session.requests.filter(r => !(r.status === RequestStatus.APPROVED && r.type === RequestType.SINGING && !r.isInRound));
+
+  // Sort matched requests by the array order provided
+  for (const id of orderedIds) {
+    const req = pendingRequests.find(r => r.id === id);
+    if (req) reordered.push(req);
+  }
+
+  // Any pending request that was somehow missed by D&D UI gets appended
+  for (const r of pendingRequests) {
+    if (!orderedIds.includes(r.id)) reordered.push(r);
+  }
+
+  session.requests = [...remainingReqs, ...reordered];
+  await saveSession(session);
+};
+
+export const setRoundOrder = async (orderedIds: string[]) => {
+  const session = await getSession();
+  if (!session.currentRound) return;
+
+  const reordered: any[] = [];
+  for (const id of orderedIds) {
+    const req = session.currentRound.find(r => r.id === id);
+    if (req) reordered.push(req);
+  }
+
+  for (const r of session.currentRound) {
+    if (!orderedIds.includes(r.id)) reordered.push(r);
+  }
+
+  session.currentRound = reordered;
+  await saveSession(session);
+};
+
+export const setParticipantsOrder = async (orderedIds: string[]) => {
+  const session = await getSession();
+
+  const reordered: any[] = [];
+  for (const id of orderedIds) {
+    const p = session.participants.find(p => p.id === id);
+    if (p) reordered.push(p);
+  }
+
+  for (const p of session.participants) {
+    if (!orderedIds.includes(p.id)) reordered.push(p);
+  }
+
+  session.participants = reordered;
+  await saveSession(session);
+};
+
+export const reorderUserRequests = async (participantId: string, orderedIds: string[]) => {
+  const session = await getSession();
+
+  const newRequests = [...session.requests];
+
+  // Find all indices of this user's approved singing requests
+  const userReqIndices = newRequests
+    .map((r, i) => r.participantId === participantId && r.status === RequestStatus.APPROVED && r.type === RequestType.SINGING && !r.isInRound ? i : -1)
+    .filter(i => i !== -1);
+
+  // Map orderedIds back to the actual request objects
+  const reorderedReqs = orderedIds.map(id => session.requests.find(r => r.id === id)).filter(Boolean) as SongRequest[];
+
+  // Place them back in the exact same original indices
+  for (let idx = 0; idx < Math.min(userReqIndices.length, reorderedReqs.length); idx++) {
+    newRequests[userReqIndices[idx]] = reorderedReqs[idx];
+  }
+
+  session.requests = newRequests;
+  await saveSession(session);
 };
 
 export const setQueueStrategy = async (strategy: QueueStrategy) => {

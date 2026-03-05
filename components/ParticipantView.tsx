@@ -813,6 +813,7 @@ const ParticipantView: React.FC = () => {
               onCancel={closeModals}
               participants={session.participants}
               currentUserId={participant.id}
+              suggestions={session.verifiedSongbook || []}
             />
           </div>
         </div>
@@ -935,9 +936,17 @@ const ParticipantView: React.FC = () => {
                 placeholder={tx.searchBook}
                 value={librarySearchQuery}
                 onChange={(e) => setLibrarySearchQuery(e.target.value)}
-                className="w-full bg-[#101015] border-2 border-white/10 rounded-[2rem] py-5 px-6 pl-14 text-xl font-bold uppercase tracking-wider text-white focus:outline-none focus:border-[var(--neon-pink)] transition-all font-righteous placeholder:text-slate-600 shadow-inner"
+                className="w-full bg-[#101015] border-2 border-white/10 rounded-[2rem] py-5 px-6 pl-14 pr-14 text-xl font-bold uppercase tracking-wider text-white focus:outline-none focus:border-[var(--neon-pink)] transition-all font-righteous placeholder:text-slate-600 shadow-inner"
               />
               <span className="absolute left-6 top-1/2 -translate-y-1/2 text-2xl text-slate-600 group-focus-within:text-[var(--neon-pink)] transition-colors">🔍</span>
+              {librarySearchQuery && (
+                <button
+                  onClick={() => setLibrarySearchQuery('')}
+                  className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors p-2"
+                >
+                  ✕
+                </button>
+              )}
             </div>
 
             <div className="grid gap-3">
@@ -1017,23 +1026,117 @@ const ParticipantView: React.FC = () => {
                 ) : (
                   <button
                     onClick={async () => {
-                      setIsScanning(true);
-                      let progress = 0;
-                      const interval = setInterval(() => {
-                        progress += 5;
-                        setScanProgress(progress);
-                        if (progress >= 100) {
-                          clearInterval(interval);
-                          setTimeout(async () => {
-                            const ranges: ('Soprano' | 'Alto' | 'Tenor' | 'Baritone' | 'Bass')[] = ['Soprano', 'Alto', 'Tenor', 'Baritone', 'Bass'];
-                            const randomRange = ranges[Math.floor(Math.random() * ranges.length)];
-                            if (userProfile) await updateVocalRange(userProfile.id, randomRange);
-                            setIsScanning(false);
-                            setScanProgress(0);
-                            await refresh();
-                          }, 500);
-                        }
-                      }, 100);
+                      try {
+                        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+                        const analyser = audioContext.createAnalyser();
+                        analyser.fftSize = 2048;
+                        const microphone = audioContext.createMediaStreamSource(stream);
+                        microphone.connect(analyser);
+
+                        const bufferLength = analyser.frequencyBinCount;
+                        const dataArray = new Float32Array(bufferLength);
+
+                        setIsScanning(true);
+                        setScanProgress(0);
+
+                        const autoCorrelate = (buf: Float32Array, sampleRate: number) => {
+                          let SIZE = buf.length;
+                          let MAX_SAMPLES = Math.floor(SIZE / 2);
+                          let best_offset = -1;
+                          let best_correlation = 0;
+                          let rms = 0;
+                          let foundGoodCorrelation = false;
+                          let correlations = new Array(MAX_SAMPLES);
+
+                          for (let i = 0; i < SIZE; i++) {
+                            let val = buf[i];
+                            rms += val * val;
+                          }
+                          rms = Math.sqrt(rms / SIZE);
+                          if (rms < 0.01) return -1;
+
+                          let lastCorrelation = 1;
+                          for (let offset = 0; offset < MAX_SAMPLES; offset++) {
+                            let correlation = 0;
+                            for (let i = 0; i < MAX_SAMPLES; i++) {
+                              correlation += Math.abs((buf[i]) - (buf[i + offset]));
+                            }
+                            correlation = 1 - (correlation / MAX_SAMPLES);
+                            correlations[offset] = correlation;
+                            if ((correlation > 0.9) && (correlation > lastCorrelation)) {
+                              foundGoodCorrelation = true;
+                              if (correlation > best_correlation) {
+                                best_correlation = correlation;
+                                best_offset = offset;
+                              }
+                            } else if (foundGoodCorrelation) {
+                              let shift = (correlations[best_offset + 1] - correlations[best_offset - 1]) / correlations[best_offset];
+                              return sampleRate / (best_offset + (8 * shift));
+                            }
+                            lastCorrelation = correlation;
+                          }
+                          if (best_correlation > 0.01) {
+                            return sampleRate / best_offset;
+                          }
+                          return -1;
+                        };
+
+                        let samples: number[] = [];
+                        let progress = 0;
+                        const interval = setInterval(() => {
+                          progress += 5;
+                          setScanProgress(progress);
+
+                          analyser.getFloatTimeDomainData(dataArray);
+                          const pitch = autoCorrelate(dataArray, audioContext.sampleRate);
+                          if (pitch > 50 && pitch < 1000) {
+                            samples.push(pitch);
+                          }
+
+                          if (progress >= 100) {
+                            clearInterval(interval);
+                            stream.getTracks().forEach(track => track.stop());
+                            audioContext.close();
+
+                            let avgPitch = 0;
+                            if (samples.length > 0) {
+                              samples.sort((a, b) => a - b);
+                              const q1 = samples[Math.floor((samples.length / 4))];
+                              const q3 = samples[Math.ceil((samples.length * (3 / 4))) - 1] || q1;
+                              const iqr = q3 - q1;
+                              const filtered = samples.filter(x => x >= q1 - 1.5 * iqr && x <= q3 + 1.5 * iqr);
+                              avgPitch = filtered.length > 0 ? filtered.reduce((a, b) => a + b, 0) / filtered.length : 0;
+                            }
+
+                            let range: 'Soprano' | 'Alto' | 'Tenor' | 'Baritone' | 'Bass' | 'Unknown' = 'Unknown';
+                            if (avgPitch > 0) {
+                              if (avgPitch < 100) range = 'Bass';
+                              else if (avgPitch < 150) range = 'Baritone';
+                              else if (avgPitch < 250) range = 'Tenor';
+                              else if (avgPitch < 350) range = 'Alto';
+                              else range = 'Soprano';
+                            }
+
+                            setTimeout(async () => {
+                              if (userProfile && range !== 'Unknown') {
+                                await updateVocalRange(userProfile.id, range as any);
+                              } else if (range === 'Unknown') {
+                                alert("Could not detect clear pitch. Please sing louder and hold a note.");
+                              }
+                              setIsScanning(false);
+                              setScanProgress(0);
+                              await refresh();
+                            }, 500);
+                          }
+                        }, 150);
+
+                      } catch (e) {
+                        console.error("Mic error:", e);
+                        setIsScanning(false);
+                        setScanProgress(0);
+                        alert("Microphone access denied or unavailable.");
+                      }
                     }}
                     className="px-8 py-4 bg-[var(--neon-cyan)]/10 hover:bg-[var(--neon-cyan)] text-[var(--neon-cyan)] hover:text-black rounded-xl font-black uppercase tracking-[0.2em] transition-all font-righteous border border-[var(--neon-cyan)]/30 hover:shadow-[0_0_20px_var(--neon-cyan)]"
                   >
