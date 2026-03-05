@@ -18,6 +18,15 @@ import SessionList from './SessionList';
 import VocalFxPanel from './VocalFxPanel';
 import { SingModeLogo } from './common/SingModeLogo';
 
+const ADJECTIVES = ['Neon', 'Cyber', 'Disco', 'Retro', 'Electric', 'Velvet', 'Funky', 'Cosmic', 'Liquid', 'Sonic', 'Crystal', 'Midnight', 'Solar', 'Atomic', 'Chrome'];
+const NOUNS = ['Cobra', 'Tiger', 'Panther', 'Dragon', 'Falcon', 'Shark', 'Wolf', 'Viper', 'Phoenix', 'Rider', 'Surfer', 'Runner', 'Dancer', 'Rocker', 'Star'];
+
+const generateArtistName = () => {
+  const adj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
+  const noun = NOUNS[Math.floor(Math.random() * NOUNS.length)];
+  const num = Math.floor(Math.random() * 99) + 1; // 1-99
+  return `${adj} ${noun} ${num}`;
+};
 
 type Tab = 'ROTATION' | 'REQUESTS' | 'FAVORITES' | 'HISTORY' | 'VOCALS';
 
@@ -196,7 +205,7 @@ const ParticipantView: React.FC = () => {
         if (urlRoom && !sincUserId) {
           console.log(`[Participant] Auto-generating Guest pass for QR scan...`);
           try {
-            const guestName = `Guest-${Math.floor(Math.random() * 10000)}`;
+            const guestName = generateArtistName();
             const result = await registerUser({ name: guestName }, true);
             if (result.success && result.profile) {
               setUserProfile(result.profile);
@@ -406,7 +415,7 @@ const ParticipantView: React.FC = () => {
   const handleGuestSingNow = async () => {
     setAuthError('');
     try {
-      const guestName = `Guest-${Math.floor(Math.random() * 10000)}`;
+      const guestName = generateArtistName();
       const result = await registerUser({ name: guestName }, true); // Auto-login true
       if (result.success && result.profile) {
         const newPart = await joinSession(result.profile.id);
@@ -625,53 +634,57 @@ const ParticipantView: React.FC = () => {
 
   return (
     <div className="max-w-2xl mx-auto p-6 space-y-10 relative">
-      {/* Tropical Profile Header */}
-      <header className="relative rounded-[3rem] p-1 overflow-hidden shadow-2xl group">
-        <div className="absolute inset-0 bg-[#0a0a0a] rounded-[2.9rem]"></div>
-        <div className="absolute top-0 inset-x-0 h-32 bg-[var(--neon-purple)]/10 blur-[50px]"></div>
+      {/* Compact Profile Header */}
+      <header className="relative rounded-3xl p-1 overflow-hidden shadow-2xl group">
+        <div className="absolute inset-0 bg-[#0a0a0a] rounded-[1.4rem]"></div>
+        <div className="absolute top-0 inset-x-0 h-24 bg-[var(--neon-purple)]/10 blur-[40px]"></div>
 
-        <div className="relative p-8 flex flex-col items-center text-center">
-          <div className="absolute top-6 right-6 z-20 flex flex-col gap-2 items-end">
+        <div className="relative p-4 px-6 flex items-center justify-between">
+          <div className="flex items-center gap-6">
+            <div className="w-16 h-16 p-0.5 rounded-full border-2 border-white/10 relative shrink-0">
+              <div className="absolute inset-0 rounded-full bg-[var(--neon-pink)]/20 blur-md"></div>
+              <img src="IGK.jpeg" alt="Logo" className="w-full h-full rounded-full object-cover relative z-10" />
+              <div className="absolute bottom-0 right-0 w-4 h-4 bg-black rounded-full flex items-center justify-center border-2 border-black z-20">
+                <div className={`w-2 h-2 rounded-full animate-pulse shadow-[0_0_10px_currentColor] ${connectionStatus === 'connected' ? 'bg-[var(--neon-green)] text-[var(--neon-green)]' : connectionStatus === 'connecting' ? 'bg-[var(--neon-yellow)] text-[var(--neon-yellow)]' : 'bg-rose-500 text-rose-500'}`}></div>
+              </div>
+            </div>
+
+            <div className="flex flex-col text-left justify-center min-w-0">
+              <div className="flex flex-wrap items-center gap-2 mb-1">
+                <h2 className="text-2xl font-bold text-white tracking-tight uppercase leading-none font-bungee truncate">{participant.name}</h2>
+                {/* Sync Mode Indicator */}
+                <span className="bg-[#101015] border border-white/10 rounded-md px-1.5 py-0.5 text-[7px] font-black tracking-widest text-[var(--neon-cyan)] shadow-xl uppercase font-righteous shrink-0 relative top-[-2px]">
+                  {connectionStatus === 'connected' ? 'P2P+CLOUD' : 'CLOUD-ONLY'}
+                </span>
+              </div>
+
+              {/* Position Indicator */}
+              <div className="flex flex-wrap items-center gap-2 mt-1">
+                {positionInLine > 0 && !isOnStage && (
+                  <div className="px-3 py-1 bg-[var(--neon-cyan)]/10 border border-[var(--neon-cyan)]/30 rounded-full inline-flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 bg-[var(--neon-cyan)] rounded-full animate-pulse shrink-0"></span>
+                    <span className="text-[var(--neon-cyan)] font-black text-[10px] uppercase tracking-[0.2em] font-righteous whitespace-nowrap">
+                      {positionInLine === 1 ? 'NEXT UP' : `${positionInLine}${positionInLine === 2 ? 'ND' : positionInLine === 3 ? 'RD' : 'TH'} IN LINE`}
+                    </span>
+                  </div>
+                )}
+                {isOnStage && (
+                  <div className="px-3 py-1 bg-[var(--neon-green)]/10 border border-[var(--neon-green)]/30 rounded-full inline-flex items-center gap-2 shadow-[0_0_10px_rgba(0,255,157,0.2)]">
+                    <span className="w-1.5 h-1.5 bg-[var(--neon-green)] rounded-full animate-blink shrink-0"></span>
+                    <span className="text-[var(--neon-green)] font-black text-[10px] uppercase tracking-[0.2em] font-righteous whitespace-nowrap">LIVE STAGE</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col items-end gap-2 shrink-0 ml-4 hidden sm:flex">
             <button
               onClick={() => setLang(lang === 'en' ? 'es' : 'en')}
-              className="px-3 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-all font-black uppercase text-[10px] tracking-widest font-righteous border border-white/20 hover:border-white/40"
+              className="px-2 py-1 bg-white/10 hover:bg-white/20 text-white rounded-md transition-all font-black uppercase text-[9px] tracking-widest font-righteous border border-white/20 hover:border-white/40"
             >
               {lang === 'en' ? 'ESPAÑOL' : 'ENGLISH'}
             </button>
-          </div>
-
-          <div className="w-24 h-24 p-1 rounded-full border-2 border-white/10 mb-6 relative">
-            <div className="absolute inset-0 rounded-full bg-[var(--neon-pink)]/20 blur-xl"></div>
-            <img src="IGK.jpeg" alt="Logo" className="w-full h-full rounded-full object-cover relative z-10" />
-            <div className="absolute bottom-0 right-0 w-6 h-6 bg-black rounded-full flex items-center justify-center border-2 border-black z-20">
-              <div className={`w-3 h-3 rounded-full animate-pulse shadow-[0_0_10px_currentColor] ${connectionStatus === 'connected' ? 'bg-[var(--neon-green)] text-[var(--neon-green)]' : connectionStatus === 'connecting' ? 'bg-[var(--neon-yellow)] text-[var(--neon-yellow)]' : 'bg-rose-500 text-rose-500'}`}></div>
-            </div>
-            {/* Sync Mode Indicator */}
-            <div className="absolute -bottom-2 -left-2 bg-[#101015] border border-white/10 rounded-lg px-2 py-0.5 text-[8px] font-black tracking-widest text-[var(--neon-cyan)] shadow-xl z-30 uppercase font-righteous">
-              {connectionStatus === 'connected' ? 'P2P+CLOUD' : 'CLOUD-ONLY'}
-            </div>
-          </div>
-
-          <h2 className="text-4xl font-bold text-white tracking-tight uppercase leading-none font-bungee mb-2">{participant.name}</h2>
-
-          {/* Position Indicator */}
-          {positionInLine > 0 && !isOnStage && (
-            <div className="mb-4 px-6 py-2 bg-[var(--neon-cyan)]/10 border border-[var(--neon-cyan)]/30 rounded-full inline-flex items-center gap-3">
-              <span className="w-2 h-2 bg-[var(--neon-cyan)] rounded-full animate-pulse"></span>
-              <span className="text-[var(--neon-cyan)] font-black text-xs uppercase tracking-[0.2em] font-righteous">
-                {positionInLine === 1 ? 'NEXT UP IN ROTATION' : `${positionInLine}${positionInLine === 2 ? 'ND' : positionInLine === 3 ? 'RD' : 'TH'} IN LINE`}
-              </span>
-            </div>
-          )}
-
-          {isOnStage && (
-            <div className="mb-4 px-6 py-2 bg-[var(--neon-green)]/10 border border-[var(--neon-green)]/30 rounded-full inline-flex items-center gap-3 shadow-[0_0_20px_rgba(0,255,157,0.2)]">
-              <span className="w-2 h-2 bg-[var(--neon-green)] rounded-full animate-blink"></span>
-              <span className="text-[var(--neon-green)] font-black text-xs uppercase tracking-[0.2em] font-righteous">LIVE ON STAGE</span>
-            </div>
-          )}
-
-          <div className="flex items-center gap-3">
             <button
               onClick={() => {
                 askConfirm('Are you sure you want to sign out?', async () => {
@@ -679,13 +692,33 @@ const ParticipantView: React.FC = () => {
                   window.location.reload();
                 });
               }}
-              className="flex items-center gap-2 px-4 py-2 bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white rounded-xl transition-all font-black uppercase text-[10px] tracking-widest font-righteous border border-rose-500/20 hover:border-transparent"
+              className="flex items-center gap-1.5 px-3 py-1 bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white rounded-lg transition-all font-black uppercase text-[10px] tracking-widest font-righteous border border-rose-500/20 hover:border-transparent whitespace-nowrap"
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
               {tx.signOut}
             </button>
           </div>
 
+          {/* Mobile actions menu */}
+          <div className="flex flex-col sm:hidden items-end gap-2 ml-2">
+            <button
+              onClick={() => setLang(lang === 'en' ? 'es' : 'en')}
+              className="p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-md transition-all font-black font-righteous border border-white/20"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+            </button>
+            <button
+              onClick={() => {
+                askConfirm('Are you sure you want to sign out?', async () => {
+                  await logoutUser();
+                  window.location.reload();
+                });
+              }}
+              className="p-1.5 bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white rounded-md transition-all font-black border border-rose-500/20"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+            </button>
+          </div>
         </div>
       </header>
 

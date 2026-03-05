@@ -248,24 +248,26 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#050510] text-white selection:bg-[var(--neon-pink)] selection:text-white">
-      <nav className="fixed top-0 inset-x-0 z-[100] backdrop-blur-xl bg-black/80 border-b border-white/5 transition-all duration-300">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-          <div onClick={() => setRole('SELECT')} className="cursor-pointer group flex items-center gap-4">
-            <div className="w-10 h-10 rounded-full border-2 border-[var(--neon-pink)] p-0.5 group-hover:shadow-[0_0_20px_rgba(255,0,127,0.4)] transition-all">
-              <img src="IGK.jpeg" alt="Logo" className="w-full h-full rounded-full" />
+      {role !== 'PARTICIPANT' && (
+        <nav className="fixed top-0 inset-x-0 z-[100] backdrop-blur-xl bg-black/80 border-b border-white/5 transition-all duration-300">
+          <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+            <div onClick={() => setRole('SELECT')} className="cursor-pointer group flex items-center gap-4">
+              <div className="w-10 h-10 rounded-full border-2 border-[var(--neon-pink)] p-0.5 group-hover:shadow-[0_0_20px_rgba(255,0,127,0.4)] transition-all">
+                <img src="IGK.jpeg" alt="Logo" className="w-full h-full rounded-full" />
+              </div>
+              <span className="font-bungee text-xl text-white tracking-widest group-hover:text-[var(--neon-cyan)] transition-colors">Singmode v.2</span>
             </div>
-            <span className="font-bungee text-xl text-white tracking-widest group-hover:text-[var(--neon-cyan)] transition-colors">Singmode v.2</span>
+            <div className="flex items-center gap-6">
+              <button
+                onClick={() => { setRole('SELECT'); setError(null); }}
+                className="text-[9px] font-bold uppercase tracking-widest px-5 py-2.5 rounded-xl transition-all font-righteous bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white border border-white/5 hover:border-white/20"
+              >
+                EXIT {role}
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-6">
-            <button
-              onClick={() => { setRole('SELECT'); setError(null); }}
-              className="text-[9px] font-bold uppercase tracking-widest px-5 py-2.5 rounded-xl transition-all font-righteous bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white border border-white/5 hover:border-white/20"
-            >
-              EXIT {role}
-            </button>
-          </div>
-        </div>
-      </nav>
+        </nav>
+      )}
 
       <main className="pb-20">
         {role === 'DJ' ? (
