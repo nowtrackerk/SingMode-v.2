@@ -86,102 +86,106 @@ syncService.onPeerConnected = async () => {
 };
 
 async function handleRemoteAction(action: RemoteAction) {
-  switch (action.type) {
-    case 'ADD_REQUEST':
-      await addRequest(action.payload);
-      break;
-    case 'JOIN_SESSION': {
-      const { id, profile } = action.payload;
-      if (profile) {
-        const accounts = await getAllAccounts();
-        const existingIdx = accounts.findIndex(a => a.id === id);
-        if (existingIdx === -1) {
-          accounts.push(profile);
-          await storage.set(ACCOUNTS_KEY, accounts);
-        } else {
-          accounts[existingIdx] = { ...accounts[existingIdx], ...profile };
-          await storage.set(ACCOUNTS_KEY, accounts);
-        }
-      }
-      await joinSession(id);
-      addSessionLog(`${profile?.name || id} joined the session`, 'info');
-
-      // Link Device
-      await runSessionUpdate((s) => {
-        if (!s.deviceConnections) s.deviceConnections = [];
-        const devIdx = s.deviceConnections.findIndex(d => d.peerId === action.senderId);
-        if (devIdx > -1) {
-          s.deviceConnections[devIdx].userId = id;
-          s.deviceConnections[devIdx].isGuest = profile?.isGuest ?? false;
-          if (action.payload.userAgent) {
-            s.deviceConnections[devIdx].userAgent = action.payload.userAgent;
+  try {
+    switch (action.type) {
+      case 'ADD_REQUEST':
+        await addRequest(action.payload);
+        break;
+      case 'JOIN_SESSION': {
+        const { id, profile } = action.payload;
+        if (profile) {
+          const accounts = await getAllAccounts();
+          const existingIdx = accounts.findIndex(a => a.id === id);
+          if (existingIdx === -1) {
+            accounts.push(profile);
+            await storage.set(ACCOUNTS_KEY, accounts);
+          } else {
+            accounts[existingIdx] = { ...accounts[existingIdx], ...profile };
+            await storage.set(ACCOUNTS_KEY, accounts);
           }
+        }
+        await joinSession(id);
+        addSessionLog(`${profile?.name || id} joined the session`, 'info');
+
+        // Link Device
+        await runSessionUpdate((s) => {
+          if (!s.deviceConnections) s.deviceConnections = [];
+          const devIdx = s.deviceConnections.findIndex(d => d.peerId === action.senderId);
+          if (devIdx > -1) {
+            s.deviceConnections[devIdx].userId = id;
+            s.deviceConnections[devIdx].isGuest = profile?.isGuest ?? false;
+            if (action.payload.userAgent) {
+              s.deviceConnections[devIdx].userAgent = action.payload.userAgent;
+            }
+          } else {
+            // Device somehow missing from session state, add it now
+            s.deviceConnections.push({
+              id: `D-${Math.random().toString(36).substr(2, 4).toUpperCase()}`,
+              peerId: action.senderId || 'unknown',
+              connectedAt: Date.now(),
+              lastSeen: Date.now(),
+              status: 'connected',
+              userAgent: action.payload.userAgent || 'Unknown',
+              userId: id,
+              isGuest: profile?.isGuest ?? false
+            });
+          }
+        });
+        break;
+      }
+      case 'TOGGLE_STATUS':
+        await updateParticipantStatus(action.payload.id, action.payload.status);
+        break;
+      case 'TOGGLE_MIC':
+        await updateParticipantMic(action.payload.id, action.payload.enabled);
+        break;
+      case 'DELETE_REQUEST':
+        await deleteRequest(action.payload);
+        break;
+      case 'UPDATE_REQUEST':
+        await updateRequest(action.payload.id, action.payload.updates);
+        break;
+      case 'ADD_CHAT':
+        await addChatMessage(action.senderId || 'unknown', action.payload.name, action.payload.text);
+        break;
+      case 'SYNC_PROFILE':
+        if (isRemoteClient) {
+          const profile = await getUserProfile();
+          if (profile && profile.id === action.payload.id) {
+            await storage.set(PROFILE_KEY, action.payload);
+          }
+        }
+        // Both DJ and Participant should update their accounts list
+        const accounts = await getAllAccounts();
+        const idx = accounts.findIndex(a => a.id === action.payload.id);
+        if (idx > -1) {
+          accounts[idx] = action.payload;
         } else {
-          // Device somehow missing from session state, add it now
-          s.deviceConnections.push({
-            id: `D-${Math.random().toString(36).substr(2, 4).toUpperCase()}`,
-            peerId: action.senderId,
-            connectedAt: Date.now(),
-            lastSeen: Date.now(),
-            status: 'connected',
-            userAgent: action.payload.userAgent || 'Unknown',
-            userId: id,
-            isGuest: profile?.isGuest ?? false
-          });
+          accounts.push(action.payload);
         }
-      });
-      break;
+        await storage.set(ACCOUNTS_KEY, accounts);
+        break;
+      case 'TOGGLE_FAVORITE':
+        // DJ handles a request from participant to toggle a favorite
+        if (!isRemoteClient) {
+          await toggleFavorite(action.payload, action.senderId);
+        }
+        break;
+      case 'REORDER_ROUND':
+        await reorderCurrentRound(action.payload);
+        break;
+      case 'REORDER_REQUESTS':
+        await reorderRequests(action.payload);
+        break;
+      case 'REORDER_PENDING':
+        await reorderPendingRequests(action.payload);
+        break;
+      case 'REORDER_MY_REQUESTS':
+        await reorderMyRequests(action.senderId || 'unknown', action.payload.requestId, action.payload.direction);
+        break;
     }
-    case 'TOGGLE_STATUS':
-      await updateParticipantStatus(action.payload.id, action.payload.status);
-      break;
-    case 'TOGGLE_MIC':
-      await updateParticipantMic(action.payload.id, action.payload.enabled);
-      break;
-    case 'DELETE_REQUEST':
-      await deleteRequest(action.payload);
-      break;
-    case 'UPDATE_REQUEST':
-      await updateRequest(action.payload.id, action.payload.updates);
-      break;
-    case 'ADD_CHAT':
-      await addChatMessage(action.senderId, action.payload.name, action.payload.text);
-      break;
-    case 'SYNC_PROFILE':
-      if (isRemoteClient) {
-        const profile = await getUserProfile();
-        if (profile && profile.id === action.payload.id) {
-          await storage.set(PROFILE_KEY, action.payload);
-        }
-      }
-      // Both DJ and Participant should update their accounts list
-      const accounts = await getAllAccounts();
-      const idx = accounts.findIndex(a => a.id === action.payload.id);
-      if (idx > -1) {
-        accounts[idx] = action.payload;
-      } else {
-        accounts.push(action.payload);
-      }
-      await storage.set(ACCOUNTS_KEY, accounts);
-      break;
-    case 'TOGGLE_FAVORITE':
-      // DJ handles a request from participant to toggle a favorite
-      if (!isRemoteClient) {
-        await toggleFavorite(action.payload, action.senderId);
-      }
-      break;
-    case 'REORDER_ROUND':
-      await reorderCurrentRound(action.payload);
-      break;
-    case 'REORDER_REQUESTS':
-      await reorderRequests(action.payload);
-      break;
-    case 'REORDER_PENDING':
-      await reorderPendingRequests(action.payload);
-      break;
-    case 'REORDER_MY_REQUESTS':
-      await reorderMyRequests(action.senderId, action.payload.requestId, action.payload.direction);
-      break;
+  } catch (e: any) {
+    console.error(`[SessionManager] Action ${action.type} handled with error:`, e.message);
   }
 }
 
@@ -1296,6 +1300,19 @@ export const markRequestAsDone = async (requestId: string) => {
         roundReq.completedAt = Date.now();
       }
     }
+
+    // Sync the "DONE" state back to the user's personal history log
+    const accounts = await getAllAccounts();
+    const accountIdx = accounts.findIndex(a => a.id === req.participantId);
+    if (accountIdx !== -1) {
+      let personalHistory = [...accounts[accountIdx].personalHistory];
+      const histIdx = personalHistory.findIndex(h => h.id === req.id);
+      if (histIdx !== -1) {
+        personalHistory[histIdx] = { ...personalHistory[histIdx], status: RequestStatus.DONE, completedAt: req.completedAt };
+        await updateAccount(req.participantId, { personalHistory });
+      }
+    }
+
     await saveSession(session);
   }
 };

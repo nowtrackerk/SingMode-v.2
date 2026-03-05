@@ -303,7 +303,8 @@ class SyncService {
 
     if (!alreadyQueued) {
       console.log('[Sync] Queuing new action locally:', action.type);
-      this.actionQueue.push(action);
+      const actionWithTimestamp = { ...action, localTimestamp: Date.now() };
+      this.actionQueue.push(actionWithTimestamp);
       this.persistQueue();
 
       // 2. Buffer to Firestore ASYNCHRONOUSLY (Don't wait for internet)
@@ -340,7 +341,12 @@ class SyncService {
   applyIncomingState(state: KaraokeSession) {
     if (!this.isHost && this.actionQueue.length > 0) {
       const initialLen = this.actionQueue.length;
-      this.actionQueue = this.actionQueue.filter(q => {
+      this.actionQueue = this.actionQueue.filter((q: any) => {
+        // Expire requests older than 2 minutes in case they were rejected by the DJ (limits, dupes)
+        if (q.localTimestamp && Date.now() - q.localTimestamp > 2 * 60 * 1000) {
+          return false;
+        }
+
         if (q.type === 'ADD_REQUEST') {
           const payload = q.payload as any;
           // If this song/artist for this participant is already in session, it reached the host

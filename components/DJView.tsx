@@ -383,13 +383,21 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
       let participantName = data.singerName || prefilledSinger?.name || 'Guest';
 
       if (!prefilledSinger && data.singerName) {
-        // Register a guest user for the manually entered name
-        const result = await registerUser({ name: data.singerName });
-        if (result.success && result.profile) {
-          participantId = result.profile.id;
-          participantName = result.profile.name;
-          // Also join the session so they appear in the participants list
+        // First check if a user with this name already exists in accounts
+        const existingAccount = accounts.find(a => a.name.toLowerCase() === data.singerName.toLowerCase().trim());
+
+        if (existingAccount) {
+          participantId = existingAccount.id;
+          participantName = existingAccount.name;
           await joinSession(participantId);
+        } else {
+          // Register a new guest user for the manually entered name
+          const result = await registerUser({ name: data.singerName });
+          if (result.success && result.profile) {
+            participantId = result.profile.id;
+            participantName = result.profile.name;
+            await joinSession(participantId);
+          }
         }
       }
 
