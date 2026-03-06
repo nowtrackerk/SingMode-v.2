@@ -37,6 +37,10 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ onBack }) => {
         });
     };
 
+    const [candidates, setCandidates] = useState<{ id: string, name: string }[]>([]);
+    const [isScanning, setIsScanning] = useState(false);
+    const [selectedId, setSelectedId] = useState<string>('');
+
     useEffect(() => {
         const load = async () => {
             const s = await getSession();
@@ -77,6 +81,94 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ onBack }) => {
         alert('Configurations locked in.');
     };
 
+    const findRestoreCandidates = async () => {
+        setIsScanning(true);
+        try {
+            const sessionsRef = collection(db, "sessions");
+            const sessionsSnap = await getDocs(sessionsRef);
+            const foundUsers = new Map<string, string>();
+
+            for (const doc of sessionsSnap.docs) {
+                const data = doc.data();
+                if (!data.fullState) continue;
+                try {
+                    const sess = JSON.parse(data.fullState);
+                    const all = [...(sess.requests || []), ...(sess.history || [])];
+                    all.forEach((r: any) => {
+                        if (r.participantId && r.participantName) {
+                            foundUsers.set(r.participantId, r.participantName);
+                        }
+                    });
+                } catch (e) { }
+            }
+
+            // Check which ones are already in the users collection to mark them?
+            // For now, just show all unique ones found in history
+            const list = Array.from(foundUsers.entries()).map(([id, name]) => ({ id, name }));
+            setCandidates(list.sort((a, b) => a.name.localeCompare(b.name)));
+            if (list.length === 0) alert("No candidates found in history.");
+        } catch (e: any) {
+            alert("Scan failed: " + e.message);
+        } finally {
+            setIsScanning(false);
+        }
+    };
+
+    const restoreUser = async (userId: string, userName: string) => {
+        try {
+            askConfirm(`Restore ${userName} and their full song history?`, async () => {
+                const userRef = doc(db, "users", userId);
+                const userSnap = await getDoc(userRef);
+
+                if (!userSnap.exists()) {
+                    await setDoc(userRef, {
+                        id: userId,
+                        name: userName,
+                        favorites: [],
+                        personalHistory: [],
+                        createdAt: Date.now()
+                    });
+                }
+
+                // Gather history from all sessions
+                const sessionsRef = collection(db, "sessions");
+                const sessionsSnap = await getDocs(sessionsRef);
+                const allDoneSongs: any[] = [];
+
+                for (const d of sessionsSnap.docs) {
+                    const data = d.data();
+                    if (!data.fullState) continue;
+                    try {
+                        const sess = JSON.parse(data.fullState);
+                        const songs = [...(sess.requests || []), ...(sess.history || [])];
+                        songs.forEach((s: any) => {
+                            if (s.participantId === userId && s.status === RequestStatus.DONE) {
+                                allDoneSongs.push(s);
+                            }
+                        });
+                    } catch (e) { }
+                }
+
+                const currentUserObj = (await getDoc(userRef)).data();
+                if (currentUserObj) {
+                    let pHistory = currentUserObj.personalHistory || [];
+                    let addedCount = 0;
+                    for (const song of allDoneSongs) {
+                        const exists = pHistory.some((h: any) => h.id === song.id || (h.songName.toLowerCase() === song.songName.toLowerCase() && h.artist.toLowerCase() === song.artist.toLowerCase()));
+                        if (!exists) {
+                            pHistory.unshift({ ...song, status: RequestStatus.DONE, completedAt: song.completedAt || Date.now() });
+                            addedCount++;
+                        }
+                    }
+                    await updateDoc(userRef, { personalHistory: pHistory.slice(0, 50) });
+                    alert(`SUCCESS: Restored ${userName} with ${addedCount} new historical entries.`);
+                }
+            });
+        } catch (e: any) {
+            alert("Restoration error: " + e.message);
+        }
+    };
+
     if (!session) return null;
 
     return (
@@ -84,7 +176,7 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ onBack }) => {
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[var(--neon-pink)] via-[var(--neon-purple)] to-[var(--neon-cyan)] z-50 animate-gradient-x"></div>
 
             <div className="max-w-4xl mx-auto relative z-10">
-                <header className="flex justify-between items-center mb-20 animate-in fade-in slide-in-from-top-4 duration-700">
+                <header className="flex justify-between items-center mb-10 animate-in fade-in slide-in-from-top-4 duration-700">
                     <div onClick={onBack} className="cursor-pointer group flex items-center gap-4">
                         <img src="IGK.jpeg" alt="Logo" className="w-12 h-12 rounded-full border-2 border-[var(--neon-pink)] group-hover:scale-110 transition-all" />
                         <h1 className="text-3xl font-bungee tracking-tight">ADMIN SETTINGS</h1>
@@ -111,7 +203,7 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ onBack }) => {
                         <span className="text-2xl">⚡</span>
                         <div>
                             <h3 className="text-[var(--neon-green)] font-black uppercase text-sm">System Update: Data Recovery Mode Active</h3>
-                            <p className="text-[10px] text-slate-400 font-bold uppercase">"RESTORE ROSS" tool is now available in System Maintenance below</p>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase">Multi-User Restoration Tool is now available in System Maintenance below</p>
                         </div>
                     </div>
                 </div>
@@ -180,91 +272,50 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ onBack }) => {
                     <section className="bg-black/40 border-2 border-white/5 rounded-[3rem] p-10 space-y-8 shadow-2xl col-span-full">
                         <div>
                             <h2 className="text-2xl font-bungee text-rose-500 mb-2 uppercase">System Maintenance</h2>
-                            <p className="text-[10px] text-slate-500 uppercase tracking-widest font-black opacity-60">DATABASE PURGE OPERATIONS</p>
+                            <p className="text-[10px] text-slate-500 uppercase tracking-widest font-black opacity-60">DATABASE PURGE & RECOVERY</p>
                         </div>
 
                         <div className="flex flex-col md:flex-row gap-6">
 
                             <div className="flex-1 p-6 bg-white/5 rounded-2xl border border-[var(--neon-green)] shadow-[0_0_20px_rgba(0,255,0,0.1)]">
                                 <h4 className="text-xs font-black uppercase tracking-widest mb-1 text-[var(--neon-green)]">Data Recovery</h4>
-                                <p className="text-[9px] text-slate-500 uppercase font-bold mb-4">Reinstates deleted user ROSS from session histories</p>
-                                <button
-                                    onClick={async () => {
-                                        try {
-                                            alert("Searching for ROSS in session histories...");
-                                            const sessionsRef = collection(db, "sessions");
-                                            const sessionsSnap = await getDocs(sessionsRef);
+                                <p className="text-[9px] text-slate-500 uppercase font-bold mb-4">Restore lost users and history from session archives</p>
 
-                                            let rossId = null;
-                                            let rossName = "ROSS";
+                                <div className="space-y-4">
+                                    <button
+                                        onClick={findRestoreCandidates}
+                                        disabled={isScanning}
+                                        className={`w-full px-6 py-3 bg-[var(--neon-green)]/10 border border-[var(--neon-green)] hover:bg-[var(--neon-green)] text-[var(--neon-green)] hover:text-black rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${isScanning ? 'opacity-50' : ''}`}
+                                    >
+                                        {isScanning ? 'SCANNING HISTORIES...' : 'SCAN FOR CANDIDATES'}
+                                    </button>
 
-                                            for (const sessionDoc of sessionsSnap.docs) {
-                                                const data = sessionDoc.data();
-                                                if (!data.fullState) continue;
-                                                let parsedSession;
-                                                try { parsedSession = JSON.parse(data.fullState); } catch (e) { continue; }
+                                    {candidates.length > 0 && (
+                                        <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
+                                            <select
+                                                value={selectedId}
+                                                onChange={(e) => setSelectedId(e.target.value)}
+                                                className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-3 text-xs font-bold uppercase text-white outline-none focus:border-[var(--neon-green)]"
+                                            >
+                                                <option value="">SELECT USER TO RESTORE</option>
+                                                {candidates.map(c => (
+                                                    <option key={c.id} value={c.id}>{c.name} ({c.id.slice(0, 5)}...)</option>
+                                                ))}
+                                            </select>
 
-                                                const allRequests = [...(parsedSession.requests || []), ...(parsedSession.history || [])];
-
-                                                for (const req of allRequests) {
-                                                    if (req.participantName && req.participantName.toLowerCase() === 'ross') {
-                                                        rossId = req.participantId;
-                                                        rossName = req.participantName;
-                                                        break;
-                                                    }
-                                                }
-                                                if (rossId) break;
-                                            }
-
-                                            if (rossId) {
-                                                const userRef = doc(db, "users", rossId);
-                                                const userSnap = await getDoc(userRef);
-                                                if (!userSnap.exists()) {
-                                                    await setDoc(userRef, { id: rossId, name: rossName, favorites: [], personalHistory: [], createdAt: Date.now() });
-                                                }
-
-                                                // Backfill just for him
-                                                const allRequests: any[] = [];
-                                                for (const sessionDoc of sessionsSnap.docs) {
-                                                    const data = sessionDoc.data();
-                                                    if (!data.fullState) continue;
-                                                    try {
-                                                        const parsedSession = JSON.parse(data.fullState);
-                                                        const reqs = [...(parsedSession.requests || []), ...(parsedSession.history || [])];
-                                                        for (const req of reqs) {
-                                                            if (req.status === RequestStatus.DONE && req.participantId === rossId) {
-                                                                allRequests.push(req);
-                                                            }
-                                                        }
-                                                    } catch (e) { }
-                                                }
-
-                                                const updatedUserSnap = await getDoc(userRef);
-                                                const userData = updatedUserSnap.data();
-                                                if (userData) {
-                                                    let pHistory = userData.personalHistory || [];
-                                                    let added = 0;
-                                                    for (const req of allRequests) {
-                                                        const exists = pHistory.some((h: any) => h.id === req.id || (h.songName.toLowerCase() === req.songName.toLowerCase() && h.artist.toLowerCase() === req.artist.toLowerCase()));
-                                                        if (!exists) {
-                                                            pHistory.unshift({ ...req, status: RequestStatus.DONE, completedAt: req.completedAt || Date.now() });
-                                                            added++;
-                                                        }
-                                                    }
-                                                    await updateDoc(userRef, { personalHistory: pHistory.slice(0, 50) });
-                                                    alert(`SUCCESS! Recreated ${rossName} and backfilled ${added} songs into his history!`);
-                                                }
-                                            } else {
-                                                alert("Could not find ROSS in any session history.");
-                                            }
-                                        } catch (e: any) {
-                                            alert("Error: " + e.message);
-                                        }
-                                    }}
-                                    className="px-6 py-3 bg-[var(--neon-green)]/10 border border-[var(--neon-green)] hover:bg-[var(--neon-green)] text-[var(--neon-green)] hover:text-black rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
-                                >
-                                    RESTORE ROSS
-                                </button>
+                                            <button
+                                                onClick={() => {
+                                                    const match = candidates.find(c => c.id === selectedId);
+                                                    if (match) restoreUser(match.id, match.name);
+                                                    else alert("Please select a candidate first.");
+                                                }}
+                                                className="w-full px-6 py-4 bg-[var(--neon-green)] text-black rounded-xl text-xs font-black uppercase tracking-widest hover:scale-[1.02] active:scale-95 transition-all shadow-lg"
+                                            >
+                                                RESTORE SELECTED USER
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
 
                             <div className="flex-1 p-6 bg-white/5 rounded-2xl border border-white/5">
