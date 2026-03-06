@@ -309,7 +309,9 @@ const ParticipantView: React.FC = () => {
   */
 
   const refresh = async () => {
-    const sess = await getSession();
+    const urlRoomStr = new URLSearchParams(window.location.search).get('room');
+    const effectiveRoomId = roomId || urlRoomStr;
+    const sess = await getSession(effectiveRoomId || undefined);
     setSession(sess);
     const up = await getUserProfile();
     setUserProfile(up);
@@ -723,7 +725,7 @@ const ParticipantView: React.FC = () => {
       </header>
 
       {/* Live On Stage - Palm Glow */}
-      {session.currentRound && session.currentRound.filter(s => s.status !== RequestStatus.DONE).length > 0 && (
+      {session.id === effectiveRoomId && session.currentRound && session.currentRound.filter(s => s.status !== RequestStatus.DONE).length > 0 && (
         <section className="animate-in fade-in slide-in-from-top-4">
           <div className="flex items-center gap-3 mb-4 px-4">
             <div className="w-2 h-2 bg-[var(--neon-green)] rounded-full animate-blink"></div>

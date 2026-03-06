@@ -353,10 +353,16 @@ export const getSession = async (sessionId?: string): Promise<KaraokeSession> =>
 
   try {
     const sessionPromise = (async () => {
-      // If we have a session ID and we are the host, prioritize the cloud state (for refreshes)
-      if (!isRemoteClient && sessionId) {
+      // If we have a session ID, prioritize the cloud state (especially for Participants)
+      if (sessionId) {
         const cloudSess = await getSessionById(sessionId);
-        if (cloudSess) return cloudSess;
+        if (cloudSess) {
+          // If we are a remote client, also update our local cache immediately
+          if (isRemoteClient) {
+            await storage.set(STORAGE_KEY, cloudSess);
+          }
+          return cloudSess;
+        }
       }
 
       const session = await storage.get(STORAGE_KEY) || { ...INITIAL_SESSION };
