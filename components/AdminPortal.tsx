@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { KaraokeSession } from '../types';
 import { getSession, saveSession, logoutUser, administrativeCleanup, cleanupStaleSessions } from '../services/sessionManager';
+import { db } from '../services/firebaseConfig';
+import { collection, getDocs, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { RequestStatus } from '../types';
 
 interface AdminPortalProps {
     onBack: () => void;
@@ -171,6 +174,89 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ onBack }) => {
                         </div>
 
                         <div className="flex flex-col md:flex-row gap-6">
+
+                            <div className="flex-1 p-6 bg-white/5 rounded-2xl border border-[var(--neon-green)] shadow-[0_0_20px_rgba(0,255,0,0.1)]">
+                                <h4 className="text-xs font-black uppercase tracking-widest mb-1 text-[var(--neon-green)]">Data Recovery</h4>
+                                <p className="text-[9px] text-slate-500 uppercase font-bold mb-4">Reinstates deleted user ROSS from session histories</p>
+                                <button
+                                    onClick={async () => {
+                                        try {
+                                            alert("Searching for ROSS in session histories...");
+                                            const sessionsRef = collection(db, "sessions");
+                                            const sessionsSnap = await getDocs(sessionsRef);
+
+                                            let rossId = null;
+                                            let rossName = "ROSS";
+
+                                            for (const sessionDoc of sessionsSnap.docs) {
+                                                const data = sessionDoc.data();
+                                                if (!data.fullState) continue;
+                                                let parsedSession;
+                                                try { parsedSession = JSON.parse(data.fullState); } catch (e) { continue; }
+
+                                                const allRequests = [...(parsedSession.requests || []), ...(parsedSession.history || [])];
+
+                                                for (const req of allRequests) {
+                                                    if (req.participantName && req.participantName.toLowerCase() === 'ross') {
+                                                        rossId = req.participantId;
+                                                        rossName = req.participantName;
+                                                        break;
+                                                    }
+                                                }
+                                                if (rossId) break;
+                                            }
+
+                                            if (rossId) {
+                                                const userRef = doc(db, "users", rossId);
+                                                const userSnap = await getDoc(userRef);
+                                                if (!userSnap.exists()) {
+                                                    await setDoc(userRef, { id: rossId, name: rossName, favorites: [], personalHistory: [], createdAt: Date.now() });
+                                                }
+
+                                                // Backfill just for him
+                                                const allRequests: any[] = [];
+                                                for (const sessionDoc of sessionsSnap.docs) {
+                                                    const data = sessionDoc.data();
+                                                    if (!data.fullState) continue;
+                                                    try {
+                                                        const parsedSession = JSON.parse(data.fullState);
+                                                        const reqs = [...(parsedSession.requests || []), ...(parsedSession.history || [])];
+                                                        for (const req of reqs) {
+                                                            if (req.status === RequestStatus.DONE && req.participantId === rossId) {
+                                                                allRequests.push(req);
+                                                            }
+                                                        }
+                                                    } catch (e) { }
+                                                }
+
+                                                const updatedUserSnap = await getDoc(userRef);
+                                                const userData = updatedUserSnap.data();
+                                                if (userData) {
+                                                    let pHistory = userData.personalHistory || [];
+                                                    let added = 0;
+                                                    for (const req of allRequests) {
+                                                        const exists = pHistory.some((h: any) => h.id === req.id || (h.songName.toLowerCase() === req.songName.toLowerCase() && h.artist.toLowerCase() === req.artist.toLowerCase()));
+                                                        if (!exists) {
+                                                            pHistory.unshift({ ...req, status: RequestStatus.DONE, completedAt: req.completedAt || Date.now() });
+                                                            added++;
+                                                        }
+                                                    }
+                                                    await updateDoc(userRef, { personalHistory: pHistory.slice(0, 50) });
+                                                    alert(`SUCCESS! Recreated ${rossName} and backfilled ${added} songs into his history!`);
+                                                }
+                                            } else {
+                                                alert("Could not find ROSS in any session history.");
+                                            }
+                                        } catch (e: any) {
+                                            alert("Error: " + e.message);
+                                        }
+                                    }}
+                                    className="px-6 py-3 bg-[var(--neon-green)]/10 border border-[var(--neon-green)] hover:bg-[var(--neon-green)] text-[var(--neon-green)] hover:text-black rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+                                >
+                                    RESTORE ROSS
+                                </button>
+                            </div>
+
                             <div className="flex-1 p-6 bg-white/5 rounded-2xl border border-white/5">
                                 <h4 className="text-xs font-black uppercase tracking-widest mb-1 text-white">Account Optimization</h4>
                                 <p className="text-[9px] text-slate-500 uppercase font-bold mb-4">Deletes all guests and duplicate entries</p>

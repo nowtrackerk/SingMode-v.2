@@ -511,7 +511,7 @@ export const resetSession = async () => {
   const current = await getSession();
   const emptySession: KaraokeSession = {
     ...INITIAL_SESSION,
-    id: `session-${Date.now()}`,
+    id: current.id, // Preserve the room ID so participants scanning the old QR code or reloading don't see stale data
     verifiedSongbook: current.verifiedSongbook, // Persist the songbook
     nextRequestNumber: 1,
     startedAt: Date.now()
