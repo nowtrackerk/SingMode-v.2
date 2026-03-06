@@ -1665,13 +1665,13 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
             <section className="animate-in fade-in slide-in-from-bottom-2 space-y-10 pb-32">
               <div className="sticky top-0 z-40 pt-4 -mt-4">
                 <div className="relative group p-1 rounded-[2.5rem] bg-[#050510]/90 shadow-2xl backdrop-blur-xl border border-white/10">
-                  <div className="absolute inset-0 bg-gradient-to-r from-[var(--neon-pink)]/20 via-[var(--neon-purple)]/20 to-[var(--neon-cyan)]/20 blur-xl opacity-0 group-focus-within:opacity-100 transition-opacity duration-500"></div>
+                  <div className="absolute inset-0 bg-gradient-to-r from-[var(--neon-pink)]/20 via-[var(--neon-purple)]/20 to-[var(--neon-cyan)]/20 blur-xl opacity-0 group-focus-within:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
                   <input
                     type="text"
                     placeholder="SEARCH SONGBOOK..."
                     value={librarySearchQuery}
                     onChange={(e) => setLibrarySearchQuery(e.target.value)}
-                    className="w-full bg-black/50 border-2 border-white/10 rounded-[2.3rem] py-6 pl-16 pr-40 text-2xl font-bold tracking-widest text-white placeholder:text-slate-600 focus:outline-none focus:border-[var(--neon-pink)] transition-all font-righteous uppercase"
+                    className="relative z-10 w-full bg-black/50 border-2 border-white/10 rounded-[2.3rem] py-6 pl-16 pr-40 text-2xl font-bold tracking-widest text-white placeholder:text-slate-600 focus:outline-none focus:border-[var(--neon-pink)] transition-all font-righteous uppercase"
                   />
                   <span className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-[var(--neon-pink)] transition-colors pointer-events-none">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
