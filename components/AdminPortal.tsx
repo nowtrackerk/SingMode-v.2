@@ -106,6 +106,16 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ onBack }) => {
                     </div>
                 </header>
 
+                <div className="mb-8 p-4 bg-[var(--neon-green)]/20 border-2 border-[var(--neon-green)] rounded-2xl flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <span className="text-2xl">⚡</span>
+                        <div>
+                            <h3 className="text-[var(--neon-green)] font-black uppercase text-sm">System Update: Data Recovery Mode Active</h3>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase">"RESTORE ROSS" tool is now available in System Maintenance below</p>
+                        </div>
+                    </div>
+                </div>
+
                 <div className="grid md:grid-cols-2 gap-10">
                     {/* Brand Identity Section */}
                     <section className="bg-black/40 border-2 border-white/5 rounded-[3rem] p-10 space-y-8 shadow-2xl">
