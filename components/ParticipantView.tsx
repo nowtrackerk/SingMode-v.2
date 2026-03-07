@@ -309,9 +309,7 @@ const ParticipantView: React.FC = () => {
   */
 
   const refresh = async () => {
-    const urlRoomStr = new URLSearchParams(window.location.search).get('room');
-    const effectiveRoomId = roomId || urlRoomStr;
-    const sess = await getSession(effectiveRoomId || undefined);
+    const sess = await getSession();
     setSession(sess);
     const up = await getUserProfile();
     setUserProfile(up);
