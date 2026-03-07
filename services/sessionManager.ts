@@ -1120,6 +1120,13 @@ export const removeParticipant = async (participantId: string) => {
 export const updateParticipantStatus = async (participantId: string, status: ParticipantStatus) => {
   if (isRemoteClient) {
     syncService.sendAction({ type: 'TOGGLE_STATUS', payload: { id: participantId, status }, senderId: participantId });
+    // Optimistic update locally
+    const session = await getSession();
+    const p = session.participants.find(p => p.id === participantId);
+    if (p) {
+      p.status = status;
+      await saveSession(session);
+    }
     return;
   }
   await runSessionUpdate((session) => {
@@ -1386,8 +1393,16 @@ export const markRequestAsDone = async (requestId: string) => {
 export const deleteRequest = async (requestId: string) => {
   if (isRemoteClient) {
     syncService.sendAction({ type: 'DELETE_REQUEST', payload: requestId, senderId: 'client' });
+
+    // Optimistic update locally
+    const profile = await getUserProfile();
+    if (profile) {
+      profile.personalHistory = profile.personalHistory.filter(h => h.id !== requestId);
+      await storage.set(PROFILE_KEY, profile);
+    }
     return;
   }
+<<<<<<< Updated upstream
   await runSessionUpdate((session) => {
     session.requests = session.requests.filter(r => r.id !== requestId);
     if (session.currentRound) {
@@ -1395,6 +1410,36 @@ export const deleteRequest = async (requestId: string) => {
       if (session.currentRound.length === 0) session.currentRound = null;
     }
   });
+=======
+  const session = await getSession();
+
+  const request = session.requests.find(r => r.id === requestId) || session.history.find(r => r.id === requestId);
+  const participantId = request?.participantId;
+
+  session.requests = session.requests.filter(r => r.id !== requestId);
+  if (session.currentRound) {
+    session.currentRound = session.currentRound.filter(r => r.id !== requestId);
+    if (session.currentRound.length === 0) session.currentRound = null;
+  }
+  await saveSession(session);
+
+  if (participantId) {
+    const accounts = await getAllAccounts();
+    const accIdx = accounts.findIndex(a => a.id === participantId);
+    if (accIdx > -1) {
+      accounts[accIdx].personalHistory = accounts[accIdx].personalHistory.filter(h => h.id !== requestId);
+      await storage.set(ACCOUNTS_KEY, accounts);
+      if (!isRemoteClient) {
+        syncService.broadcastAction({ type: 'SYNC_PROFILE', payload: accounts[accIdx], senderId: 'DJ' });
+      }
+
+      const activeStub = await getUserProfile();
+      if (activeStub && activeStub.id === participantId) {
+        await storage.set(PROFILE_KEY, accounts[accIdx]);
+      }
+    }
+  }
+>>>>>>> Stashed changes
 };
 
 export const reorderRequest = async (requestId: string, direction: 'up' | 'down') => {

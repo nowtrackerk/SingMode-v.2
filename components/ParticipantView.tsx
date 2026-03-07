@@ -814,7 +814,7 @@ const ParticipantView: React.FC = () => {
       <div className="flex gap-4 pt-2">
         <button
           onClick={() => setStatus(ParticipantStatus.READY)}
-          className={`flex-1 py-4 rounded-[1.5rem] font-bold text-xl uppercase tracking-wider transition-all border-2 flex items-center justify-center gap-2 group relative overflow-hidden font-bungee ${participant.status === ParticipantStatus.READY
+          className={`flex-1 py-4 rounded-[1.5rem] font-bold text-xl uppercase tracking-wider transition-all border-2 flex items-center justify-center gap-2 group relative overflow-hidden font-bungee ${participant?.status === ParticipantStatus.READY
             ? 'bg-[#051005] border-[var(--neon-green)] shadow-[0_0_30px_rgba(0,255,157,0.2)] text-[var(--neon-green)]'
             : 'bg-[#101015] border-white/5 text-slate-700 hover:border-white/10'
             }`}
@@ -824,7 +824,7 @@ const ParticipantView: React.FC = () => {
 
         <button
           onClick={() => setStatus(ParticipantStatus.STANDBY)}
-          className={`flex-1 py-4 rounded-[1.5rem] font-bold text-xl uppercase tracking-wider transition-all border-2 flex items-center justify-center gap-2 group relative overflow-hidden font-bungee ${participant.status === ParticipantStatus.STANDBY
+          className={`flex-1 py-4 rounded-[1.5rem] font-bold text-xl uppercase tracking-wider transition-all border-2 flex items-center justify-center gap-2 group relative overflow-hidden font-bungee ${participant?.status === ParticipantStatus.STANDBY
             ? 'bg-[#150505] border-rose-500 shadow-[0_0_30px_rgba(244,63,94,0.2)] text-rose-500'
             : 'bg-[#101015] border-white/5 text-slate-700 hover:border-white/10'
             }`}
