@@ -105,6 +105,7 @@ async function handleRemoteAction(action: RemoteAction) {
         await addRequest(action.payload);
         break;
       case 'JOIN_SESSION': {
+        console.log('[DJ] Received JOIN_SESSION for', action.payload.id);
         const { id, profile } = action.payload;
         if (profile) {
           const accounts = await getAllAccounts();
@@ -116,8 +117,14 @@ async function handleRemoteAction(action: RemoteAction) {
             accounts[existingIdx] = { ...accounts[existingIdx], ...profile };
             await storage.set(ACCOUNTS_KEY, accounts);
           }
+          console.log('[DJ] Updated local accounts cache for', profile.name);
         }
-        await joinSession(id);
+        try {
+          await joinSession(id);
+          console.log('[DJ] joinSession completed successfully for', id);
+        } catch (e: any) {
+          console.error('[DJ] joinSession failed for', id, e);
+        }
         addSessionLog(`${profile?.name || id} joined the session`, 'info');
 
         // Link Device
@@ -144,6 +151,7 @@ async function handleRemoteAction(action: RemoteAction) {
             });
           }
         });
+        console.log('[DJ] Finished JOIN_SESSION handling');
         break;
       }
       case 'TOGGLE_STATUS':
@@ -754,6 +762,15 @@ export const registerUser = async (data: Partial<UserProfile>, autoLogin = false
       uid = data.id || activeId() || `guest-${Math.random().toString(36).substr(2, 9)}`;
     }
 
+    if (!isFirebaseUser && !auth.currentUser) {
+      try {
+        await signInAnonymously(auth);
+        console.log("Device authenticated anonymously for Guest/Local User");
+      } catch (authErr) {
+        console.warn("Failed to sign in anonymously. Sync may be degraded:", authErr);
+      }
+    }
+
     const profile: UserProfile = {
       id: uid!,
       name: data.name?.trim() || 'Guest',
@@ -937,6 +954,16 @@ export const joinSession = async (profileId: string): Promise<Participant> => {
     throw new Error(`ACCESS DENIED: ${banRecord.reason}`);
   }
 
+  // Ensure Cloud Fallback write permissions for returning profiles
+  if (!auth.currentUser) {
+    try {
+      await signInAnonymously(auth);
+      console.log("Device authenticated anonymously for returning participant");
+    } catch (authErr) {
+      console.warn("Failed to sign in anonymously. Cloud Fallback may be degraded:", authErr);
+    }
+  }
+
   if (isRemoteClient) {
     const existingProfile = await getUserProfile();
     syncService.sendAction({
@@ -969,31 +996,27 @@ export const joinSession = async (profileId: string): Promise<Participant> => {
   return await addParticipantToSession(session, profile);
 };
 
-const addParticipantToSession = async (session: KaraokeSession, profile: UserProfile): Promise<Participant> => {
-  const newParticipant: Participant = {
-    id: profile.id,
-    name: profile.name,
-    status: ParticipantStatus.STANDBY,
-    micEnabled: false,
-    joinedAt: Date.now()
-  };
-  const existingIdx = session.participants.findIndex(p => p.id === profile.id);
-  if (existingIdx > -1) {
-    session.participants[existingIdx] = {
-      ...session.participants[existingIdx],
-      ...newParticipant,
-      status: session.participants[existingIdx].status
+const addParticipantToSession = async (sessionParam: KaraokeSession, profile: UserProfile): Promise<Participant> => {
+  return await runSessionUpdate((session) => {
+    const newParticipant: Participant = {
+      id: profile.id,
+      name: profile.name,
+      status: ParticipantStatus.STANDBY,
+      micEnabled: false,
+      joinedAt: Date.now()
     };
-  } else {
-    session.participants.push(newParticipant);
-  }
-
-  // Link Device if found (try to match implicit sender or just skip if we don't have peerId here easily)
-  // Note: joinSession is called on DJ side by handleRemoteAction, but we don't pass senderId to joinSession easily yet.
-  // We'll handle this linkage in handleRemoteAction instead for better reliability.
-
-  await saveSession(session);
-  return newParticipant;
+    const existingIdx = session.participants.findIndex(p => p.id === profile.id);
+    if (existingIdx > -1) {
+      session.participants[existingIdx] = {
+        ...session.participants[existingIdx],
+        ...newParticipant,
+        status: session.participants[existingIdx].status
+      };
+    } else {
+      session.participants.push(newParticipant);
+    }
+    return newParticipant;
+  });
 };
 
 export const updateVocalRange = async (profileId: string, range: 'Soprano' | 'Alto' | 'Tenor' | 'Baritone' | 'Bass' | 'Unknown') => {
@@ -1099,12 +1122,12 @@ export const updateParticipantStatus = async (participantId: string, status: Par
     syncService.sendAction({ type: 'TOGGLE_STATUS', payload: { id: participantId, status }, senderId: participantId });
     return;
   }
-  const session = await getSession();
-  const p = session.participants.find(p => p.id === participantId);
-  if (p) {
-    p.status = status;
-    await saveSession(session);
-  }
+  await runSessionUpdate((session) => {
+    const p = session.participants.find(p => p.id === participantId);
+    if (p) {
+      p.status = status;
+    }
+  });
 };
 
 export const banUser = async (userId: string, name: string, reason: string) => {
@@ -1192,58 +1215,70 @@ export const addRequest = async (request: Omit<SongRequest, 'id' | 'createdAt' |
     syncService.sendAction({ type: 'ADD_REQUEST', payload: request, senderId: request.participantId });
     return null;
   }
-  const session = await getSession();
-  const requestNumber = session.nextRequestNumber++;
-  const newRequest: SongRequest = {
-    ...request,
-    id: Math.random().toString(36).substr(2, 9),
-    requestNumber,
-    createdAt: Date.now(),
-    status: RequestStatus.PENDING,
-    isInRound: false
-  };
-  // A.7.1 Enforce Max Requests Per User
-  const userRequests = session.requests.filter(r => r.participantId === request.participantId && r.status === RequestStatus.PENDING);
+  return await runSessionUpdate(async (session) => {
+    const requestNumber = session.nextRequestNumber++;
+    const newRequest: SongRequest = {
+      ...request,
+      id: Math.random().toString(36).substr(2, 9),
+      requestNumber,
+      createdAt: Date.now(),
+      status: RequestStatus.PENDING,
+      isInRound: false
+    };
 
-  if (session.maxRequestsPerUser && userRequests.length >= session.maxRequestsPerUser) {
-    throw new Error(`Request limit reached. Max ${session.maxRequestsPerUser} requests allowed per performer.`);
-  }
-
-  // Duplicate Check: Avoid same song/artist for same user in pending state
-  const isDuplicate = userRequests.some(r =>
-    r.songName.toLowerCase().trim() === request.songName.toLowerCase().trim() &&
-    r.artist.toLowerCase().trim() === request.artist.toLowerCase().trim()
-  );
-  if (isDuplicate) {
-    console.log("[SessionManager] Duplicate request detected, skipping:", request.songName);
-    return null;
-  }
-
-  // D.12: New Performer requests are added on the first position in the Queue (LIFO? The description says 'first position in the Queue', traditionally this means highest priority)
-  // Let's implement unshift as requested.
-  session.requests.unshift(newRequest);
-  updateVerifiedSongbook(session, newRequest);
-
-  // Update the account's personal history on the DJ/Host side
-  const accounts = await getAllAccounts();
-  const accIdx = accounts.findIndex(a => a.id === request.participantId);
-  if (accIdx > -1) {
-    accounts[accIdx].personalHistory = [newRequest, ...accounts[accIdx].personalHistory].slice(0, 50);
-    await storage.set(ACCOUNTS_KEY, accounts);
-    if (!isRemoteClient) {
-      syncService.broadcastAction({ type: 'SYNC_PROFILE', payload: accounts[accIdx], senderId: 'DJ' });
+    // Ensure Participant tracking exists to fix Queue Display bugs
+    if (!session.participants.some(p => p.id === request.participantId)) {
+      session.participants.push({
+        id: request.participantId,
+        name: request.participantName || 'Guest User',
+        status: ParticipantStatus.STANDBY,
+        micEnabled: false,
+        joinedAt: Date.now()
+      });
     }
-  }
 
-  // Also update local active profile if it's us
-  const activeStub = await getUserProfile();
-  if (activeStub && activeStub.id === request.participantId) {
-    const updated = accounts.find(a => a.id === request.participantId);
-    if (updated) await storage.set(PROFILE_KEY, updated);
-  }
+    // A.7.1 Enforce Max Requests Per User
+    const userRequests = session.requests.filter(r => r.participantId === request.participantId && r.status === RequestStatus.PENDING);
 
-  await saveSession(session);
-  return newRequest;
+    if (session.maxRequestsPerUser && userRequests.length >= session.maxRequestsPerUser) {
+      throw new Error(`Request limit reached. Max ${session.maxRequestsPerUser} requests allowed per performer.`);
+    }
+
+    // Duplicate Check: Avoid same song/artist for same user in pending state
+    const isDuplicate = userRequests.some(r =>
+      r.songName.toLowerCase().trim() === request.songName.toLowerCase().trim() &&
+      r.artist.toLowerCase().trim() === request.artist.toLowerCase().trim()
+    );
+    if (isDuplicate) {
+      console.log("[SessionManager] Duplicate request detected, skipping:", request.songName);
+      return null;
+    }
+
+    // D.12: New Performer requests are added on the first position in the Queue (LIFO? The description says 'first position in the Queue', traditionally this means highest priority)
+    // Let's implement unshift as requested.
+    session.requests.unshift(newRequest);
+    updateVerifiedSongbook(session, newRequest);
+
+    // Update the account's personal history on the DJ/Host side
+    const accounts = await getAllAccounts();
+    const accIdx = accounts.findIndex(a => a.id === request.participantId);
+    if (accIdx > -1) {
+      accounts[accIdx].personalHistory = [newRequest, ...accounts[accIdx].personalHistory].slice(0, 50);
+      await storage.set(ACCOUNTS_KEY, accounts);
+      if (!isRemoteClient) {
+        syncService.broadcastAction({ type: 'SYNC_PROFILE', payload: accounts[accIdx], senderId: 'DJ' });
+      }
+    }
+
+    // Also update local active profile if it's us
+    const activeStub = await getUserProfile();
+    if (activeStub && activeStub.id === request.participantId) {
+      const updated = accounts.find(a => a.id === request.participantId);
+      if (updated) await storage.set(PROFILE_KEY, updated);
+    }
+
+    return newRequest;
+  });
 };
 
 export const updateRequest = async (requestId: string, updates: Partial<SongRequest>) => {
@@ -1251,51 +1286,51 @@ export const updateRequest = async (requestId: string, updates: Partial<SongRequ
     syncService.sendAction({ type: 'UPDATE_REQUEST', payload: { id: requestId, updates }, senderId: 'client' });
     return;
   }
-  const session = await getSession();
-  const index = session.requests.findIndex(r => r.id === requestId);
-  let participantId = '';
-  if (index !== -1) {
-    session.requests[index] = { ...session.requests[index], ...updates };
-    participantId = session.requests[index].participantId;
-    updateVerifiedSongbook(session, session.requests[index]);
-  }
-  if (session.currentRound) {
-    const roundIndex = session.currentRound.findIndex(r => r.id === requestId);
-    if (roundIndex !== -1) {
-      session.currentRound[roundIndex] = { ...session.currentRound[roundIndex], ...updates };
-      participantId = session.currentRound[roundIndex].participantId;
+  await runSessionUpdate(async (session) => {
+    const index = session.requests.findIndex(r => r.id === requestId);
+    let participantId = '';
+    if (index !== -1) {
+      session.requests[index] = { ...session.requests[index], ...updates };
+      participantId = session.requests[index].participantId;
+      updateVerifiedSongbook(session, session.requests[index]);
     }
-  }
-
-  if (participantId) {
-    const accounts = await getAllAccounts();
-    const accIdx = accounts.findIndex(a => a.id === participantId);
-    if (accIdx > -1) {
-      const hIdx = accounts[accIdx].personalHistory.findIndex(h => h.id === requestId);
-      if (hIdx !== -1) {
-        accounts[accIdx].personalHistory[hIdx] = { ...accounts[accIdx].personalHistory[hIdx], ...updates };
-        await storage.set(ACCOUNTS_KEY, accounts);
-        if (!isRemoteClient) {
-          syncService.broadcastAction({ type: 'SYNC_PROFILE', payload: accounts[accIdx], senderId: 'DJ' });
-        }
+    if (session.currentRound) {
+      const roundIndex = session.currentRound.findIndex(r => r.id === requestId);
+      if (roundIndex !== -1) {
+        session.currentRound[roundIndex] = { ...session.currentRound[roundIndex], ...updates };
+        participantId = session.currentRound[roundIndex].participantId;
       }
     }
-    const activeStub = await getUserProfile();
-    if (activeStub && activeStub.id === participantId) {
-      const updated = accounts.find(a => a.id === participantId);
-      if (updated) await storage.set(PROFILE_KEY, updated);
+
+    if (participantId) {
+      const accounts = await getAllAccounts();
+      const accIdx = accounts.findIndex(a => a.id === participantId);
+      if (accIdx > -1) {
+        const hIdx = accounts[accIdx].personalHistory.findIndex(h => h.id === requestId);
+        if (hIdx !== -1) {
+          accounts[accIdx].personalHistory[hIdx] = { ...accounts[accIdx].personalHistory[hIdx], ...updates };
+          await storage.set(ACCOUNTS_KEY, accounts);
+          if (!isRemoteClient) {
+            syncService.broadcastAction({ type: 'SYNC_PROFILE', payload: accounts[accIdx], senderId: 'DJ' });
+          }
+        }
+      }
+      const activeStub = await getUserProfile();
+      if (activeStub && activeStub.id === participantId) {
+        const updated = accounts.find(a => a.id === participantId);
+        if (updated) await storage.set(PROFILE_KEY, updated);
+      }
     }
-  }
-  await saveSession(session);
+  });
 };
 
 export const approveRequest = async (requestId: string) => {
-  const session = await getSession();
-  const req = session.requests.find(r => r.id === requestId);
-  if (req) {
-    req.status = RequestStatus.APPROVED;
-    await saveSession(session);
-  }
+  await runSessionUpdate((session) => {
+    const req = session.requests.find(r => r.id === requestId);
+    if (req) {
+      req.status = RequestStatus.APPROVED;
+    }
+  });
 };
 
 export const promoteToStage = async (requestId: string) => {
@@ -1353,13 +1388,13 @@ export const deleteRequest = async (requestId: string) => {
     syncService.sendAction({ type: 'DELETE_REQUEST', payload: requestId, senderId: 'client' });
     return;
   }
-  const session = await getSession();
-  session.requests = session.requests.filter(r => r.id !== requestId);
-  if (session.currentRound) {
-    session.currentRound = session.currentRound.filter(r => r.id !== requestId);
-    if (session.currentRound.length === 0) session.currentRound = null;
-  }
-  await saveSession(session);
+  await runSessionUpdate((session) => {
+    session.requests = session.requests.filter(r => r.id !== requestId);
+    if (session.currentRound) {
+      session.currentRound = session.currentRound.filter(r => r.id !== requestId);
+      if (session.currentRound.length === 0) session.currentRound = null;
+    }
+  });
 };
 
 export const reorderRequest = async (requestId: string, direction: 'up' | 'down') => {

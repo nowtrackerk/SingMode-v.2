@@ -144,6 +144,7 @@ class SyncService {
         this.startHeartbeat();
 
         if (!this.isHost && room) {
+          this.hostId = room; // CRITICAL: Save target room ID for Firestore Fallback queue
           this.connectToHost(room);
         }
 
@@ -357,6 +358,16 @@ class SyncService {
             r.artist.toLowerCase().trim() === payload.artist.toLowerCase().trim()
           );
         }
+
+        if (q.type === 'TOGGLE_STATUS') {
+          const payload = q.payload as any;
+          const p = state.participants.find(part => part.id === payload.id);
+          // If the session state now reflects the requested status, the action succeeded.
+          if (p && p.status === payload.status) {
+            return false;
+          }
+        }
+
         return true;
       });
       if (this.actionQueue.length !== initialLen) {
@@ -370,6 +381,16 @@ class SyncService {
 
   getPendingActions(): RemoteAction[] {
     return this.actionQueue;
+  }
+
+  removePendingAction(localTimestamp: number) {
+    if (!localTimestamp) return;
+    const initialLen = this.actionQueue.length;
+    this.actionQueue = this.actionQueue.filter((q: any) => q.localTimestamp !== localTimestamp);
+    if (this.actionQueue.length !== initialLen) {
+      console.log(`[Sync] Manually removed pending action from queue.`);
+      this.persistQueue();
+    }
   }
 
   destroy() {

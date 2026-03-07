@@ -903,8 +903,19 @@ const ParticipantView: React.FC = () => {
                       SENDING...
                     </div>
                   </div>
-                  <div className="mt-4 text-[10px] text-[var(--neon-cyan)] font-bold tracking-widest uppercase opacity-60 font-mono">
-                    CLOUD BUFFERED // AUTO-RETRYING
+                  <div className="mt-4 flex justify-between items-center border-t border-white/5 pt-3">
+                    <div className="text-[10px] text-[var(--neon-cyan)] font-bold tracking-widest uppercase opacity-60 font-mono">
+                      CLOUD BUFFERED // AUTO-RETRYING
+                    </div>
+                    <button
+                      onClick={() => {
+                        syncService.removePendingAction((action as any).localTimestamp);
+                        refresh();
+                      }}
+                      className="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 rounded-lg text-xs font-black uppercase tracking-widest transition-all font-righteous text-rose-500 border border-rose-500/20"
+                    >
+                      {tx.cancel || 'CANCEL'}
+                    </button>
                   </div>
                 </div>
               </div>
