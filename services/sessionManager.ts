@@ -374,6 +374,13 @@ export const getSession = async (sessionId?: string): Promise<KaraokeSession> =>
       }
 
       const session = await storage.get(STORAGE_KEY) || { ...INITIAL_SESSION };
+
+      // If we are a remote client connecting to a specific room, and the local storage room ID differs,
+      // we must not return the stale session.
+      if (sessionId && isRemoteClient && session.id && session.id !== sessionId) {
+        return { ...INITIAL_SESSION, id: sessionId };
+      }
+
       if (!session.history) session.history = [];
       if (!session.messages) session.messages = [];
       if (!session.tickerMessages) session.tickerMessages = [];
@@ -1230,7 +1237,8 @@ export const addRequest = async (request: Omit<SongRequest, 'id' | 'createdAt' |
       requestNumber,
       createdAt: Date.now(),
       status: RequestStatus.PENDING,
-      isInRound: false
+      isInRound: false,
+      sessionName: session.id
     };
 
     // Ensure Participant tracking exists to fix Queue Display bugs
@@ -1402,44 +1410,27 @@ export const deleteRequest = async (requestId: string) => {
     }
     return;
   }
-<<<<<<< Updated upstream
+  let participantId: string | undefined;
+
   await runSessionUpdate((session) => {
+    const request = session.requests.find(r => r.id === requestId) || session.history.find(r => r.id === requestId);
+    participantId = request?.participantId;
+
     session.requests = session.requests.filter(r => r.id !== requestId);
     if (session.currentRound) {
       session.currentRound = session.currentRound.filter(r => r.id !== requestId);
       if (session.currentRound.length === 0) session.currentRound = null;
     }
   });
-=======
-  const session = await getSession();
-
-  const request = session.requests.find(r => r.id === requestId) || session.history.find(r => r.id === requestId);
-  const participantId = request?.participantId;
-
-  session.requests = session.requests.filter(r => r.id !== requestId);
-  if (session.currentRound) {
-    session.currentRound = session.currentRound.filter(r => r.id !== requestId);
-    if (session.currentRound.length === 0) session.currentRound = null;
-  }
-  await saveSession(session);
 
   if (participantId) {
     const accounts = await getAllAccounts();
     const accIdx = accounts.findIndex(a => a.id === participantId);
     if (accIdx > -1) {
-      accounts[accIdx].personalHistory = accounts[accIdx].personalHistory.filter(h => h.id !== requestId);
-      await storage.set(ACCOUNTS_KEY, accounts);
-      if (!isRemoteClient) {
-        syncService.broadcastAction({ type: 'SYNC_PROFILE', payload: accounts[accIdx], senderId: 'DJ' });
-      }
-
-      const activeStub = await getUserProfile();
-      if (activeStub && activeStub.id === participantId) {
-        await storage.set(PROFILE_KEY, accounts[accIdx]);
-      }
+      const personalHistory = accounts[accIdx].personalHistory.filter(h => h.id !== requestId);
+      await updateAccount(participantId, { personalHistory });
     }
   }
->>>>>>> Stashed changes
 };
 
 export const reorderRequest = async (requestId: string, direction: 'up' | 'down') => {
@@ -1916,12 +1907,20 @@ export const unregisterSession = async (sessionId: string) => {
 
 export const getSessionHistory = async (): Promise<ActiveSession[]> => {
   try {
+    const profile = await getUserProfile();
+    const hostUid = profile?.id;
+
+    if (!hostUid) return [];
+
     const sessionsRef = collection(db, "sessions");
-    const q = query(sessionsRef, where("isActive", "==", false));
+    const q = query(sessionsRef, where("hostUid", "==", hostUid));
     const snapshot = await getDocs(q);
     const sessions: ActiveSession[] = [];
     snapshot.forEach(doc => {
-      sessions.push(doc.data() as ActiveSession);
+      const data = doc.data() as ActiveSession;
+      if (!data.isActive) {
+        sessions.push(data);
+      }
     });
     return sessions.sort((a, b) => (b.endedAt || 0) - (a.endedAt || 0));
   } catch (e) {

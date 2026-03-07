@@ -1025,21 +1025,40 @@ const ParticipantView: React.FC = () => {
         )}
 
         {activeTab === 'HISTORY' && userProfile && (
-          <section className="animate-in slide-in-from-bottom-8 duration-500 space-y-4">
-            {userProfile.personalHistory.map((h, i) => (
-              <div key={i} className="bg-[#101015] p-6 rounded-[2rem] flex justify-between items-center border-2 border-white/5 hover:border-[var(--neon-purple)] group transition-all">
-                <div className="min-w-0 pr-4">
-                  <div className="text-white font-bold uppercase truncate text-2xl font-bungee tracking-tight mb-1 group-hover:text-[var(--neon-purple)] transition-colors">{h.songName}</div>
-                  <div className="text-base text-[var(--neon-cyan)]/70 font-bold uppercase tracking-[0.2em] font-righteous">{h.artist}</div>
+          <section className="animate-in slide-in-from-bottom-8 duration-500 space-y-6">
+            {(() => {
+              const approvedHistory = userProfile.personalHistory.filter(h => h.status === RequestStatus.APPROVED || h.status === RequestStatus.DONE);
+              if (approvedHistory.length === 0) {
+                return (
+                  <div className="text-center py-20 opacity-30 border-2 border-dashed border-white/5 rounded-[2.5rem] bg-black/20">
+                    <p className="text-sm font-black uppercase tracking-[0.4em] font-righteous text-slate-600">NO HISTORY FOUND</p>
+                  </div>
+                );
+              }
+
+              // Group by sessionName
+              const grouped = approvedHistory.reduce((acc, curr) => {
+                const sName = curr.sessionName || 'PREVIOUS SESSIONS';
+                if (!acc[sName]) acc[sName] = [];
+                acc[sName].push(curr);
+                return acc;
+              }, {} as Record<string, typeof approvedHistory>);
+
+              return Object.entries(grouped).map(([sName, items]) => (
+                <div key={sName} className="space-y-4">
+                  <h3 className="text-[var(--neon-purple)] font-black uppercase tracking-[0.2em] text-sm px-4 font-righteous opacity-80">{sName}</h3>
+                  {items.map((h, i) => (
+                    <div key={i} className="bg-[#101015] p-6 rounded-[2rem] flex justify-between items-center border-2 border-white/5 hover:border-[var(--neon-purple)] group transition-all">
+                      <div className="min-w-0 pr-4">
+                        <div className="text-white font-bold uppercase truncate text-2xl font-bungee tracking-tight mb-1 group-hover:text-[var(--neon-purple)] transition-colors">{h.songName}</div>
+                        <div className="text-base text-[var(--neon-cyan)]/70 font-bold uppercase tracking-[0.2em] font-righteous">{h.artist}</div>
+                      </div>
+                      <button onClick={() => { setPrefillData({ ...h, type: RequestType.SINGING }); setShowRequestForm(true); }} className="text-slate-600 hover:text-white border border-white/5 hover:border-white px-4 py-2 rounded-xl font-black text-xs uppercase tracking-widest transition-all font-righteous">AGAIN</button>
+                    </div>
+                  ))}
                 </div>
-                <button onClick={() => { setPrefillData({ ...h, type: RequestType.SINGING }); setShowRequestForm(true); }} className="text-slate-600 hover:text-white border border-white/5 hover:border-white px-4 py-2 rounded-xl font-black text-xs uppercase tracking-widest transition-all font-righteous">AGAIN</button>
-              </div>
-            ))}
-            {userProfile.personalHistory.length === 0 && (
-              <div className="text-center py-20 opacity-30 border-2 border-dashed border-white/5 rounded-[2.5rem] bg-black/20">
-                <p className="text-sm font-black uppercase tracking-[0.4em] font-righteous text-slate-600">NO HISTORY FOUND</p>
-              </div>
-            )}
+              ));
+            })()}
           </section>
         )}
 

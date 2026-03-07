@@ -73,6 +73,7 @@ export interface SongRequest {
   message?: string; // Metadata for A.16: User message to DJ
   duetPartnerId?: string; // Metadata for A.12: Duet Partner ID
   duetPartnerName?: string; // Metadata for A.12: Duet Partner Name
+  sessionName?: string; // Identifier for grouping history by session
 }
 
 export interface BannedUser {
