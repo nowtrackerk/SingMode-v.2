@@ -1007,8 +1007,18 @@ const ParticipantView: React.FC = () => {
                 return combined.map(song => (
                   <div key={song.id} className="bg-[#101015] p-5 rounded-[2rem] flex justify-between items-center group border-2 border-white/5 hover:border-[var(--neon-yellow)] transition-all">
                     <div className="min-w-0 pr-4">
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center gap-3 mb-1">
                         <div className="text-white font-bold uppercase truncate text-2xl font-bungee tracking-tight group-hover:text-[var(--neon-yellow)] transition-colors">{song.songName}</div>
+                        <a
+                          href={song.youtubeUrl || `https://www.youtube.com/results?search_query=${encodeURIComponent(`${song.songName} ${song.artist} karaoke`)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-center w-8 h-8 rounded-full bg-white/5 hover:bg-[var(--neon-cyan)] text-[var(--neon-cyan)] hover:text-black border border-[var(--neon-cyan)]/30 hover:border-transparent transition-all hover:scale-110 shadow-[0_0_10px_rgba(5,217,232,0)] hover:shadow-[0_0_15px_rgba(5,217,232,0.6)]"
+                          title="Listen on YouTube"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <svg className="w-3.5 h-3.5 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                        </a>
                         {song.isFavorite && <span className="text-lg text-[var(--neon-yellow)] animate-pulse">★</span>}
                       </div>
                       <div className="text-sm text-slate-400 font-bold uppercase tracking-[0.2em] font-righteous">{song.artist}</div>
@@ -1050,7 +1060,19 @@ const ParticipantView: React.FC = () => {
                   {items.map((h, i) => (
                     <div key={i} className="bg-[#101015] p-6 rounded-[2rem] flex justify-between items-center border-2 border-white/5 hover:border-[var(--neon-purple)] group transition-all">
                       <div className="min-w-0 pr-4">
-                        <div className="text-white font-bold uppercase truncate text-2xl font-bungee tracking-tight mb-1 group-hover:text-[var(--neon-purple)] transition-colors">{h.songName}</div>
+                        <div className="flex items-center gap-3 mb-1">
+                          <div className="text-white font-bold uppercase truncate text-2xl font-bungee tracking-tight group-hover:text-[var(--neon-purple)] transition-colors">{h.songName}</div>
+                          <a
+                            href={h.youtubeUrl || `https://www.youtube.com/results?search_query=${encodeURIComponent(`${h.songName} ${h.artist} karaoke`)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center justify-center w-8 h-8 rounded-full bg-white/5 hover:bg-[var(--neon-cyan)] text-[var(--neon-cyan)] hover:text-black border border-[var(--neon-cyan)]/30 hover:border-transparent transition-all hover:scale-110 shadow-[0_0_10px_rgba(5,217,232,0)] hover:shadow-[0_0_15px_rgba(5,217,232,0.6)]"
+                            title="Listen on YouTube"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <svg className="w-3.5 h-3.5 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                          </a>
+                        </div>
                         <div className="text-base text-[var(--neon-cyan)]/70 font-bold uppercase tracking-[0.2em] font-righteous">{h.artist}</div>
                       </div>
                       <button onClick={() => { setPrefillData({ ...h, type: RequestType.SINGING }); setShowRequestForm(true); }} className="text-slate-600 hover:text-white border border-white/5 hover:border-white px-4 py-2 rounded-xl font-black text-xs uppercase tracking-widest transition-all font-righteous">AGAIN</button>
