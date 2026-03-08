@@ -907,7 +907,7 @@ const ParticipantView: React.FC = () => {
                     </div>
                     <button
                       onClick={() => {
-                        syncService.removePendingAction((action as any).localTimestamp);
+                        syncService.removePendingAction(action);
                         refresh();
                       }}
                       className="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 rounded-lg text-xs font-black uppercase tracking-widest transition-all font-righteous text-rose-500 border border-rose-500/20"

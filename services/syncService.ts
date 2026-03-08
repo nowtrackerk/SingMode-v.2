@@ -383,10 +383,18 @@ class SyncService {
     return this.actionQueue;
   }
 
-  removePendingAction(localTimestamp: number) {
-    if (!localTimestamp) return;
+  removePendingAction(actionToRemove: any) {
+    if (!actionToRemove) return;
     const initialLen = this.actionQueue.length;
-    this.actionQueue = this.actionQueue.filter((q: any) => q.localTimestamp !== localTimestamp);
+    this.actionQueue = this.actionQueue.filter((q: any) => {
+      if (typeof actionToRemove === 'number' && q.localTimestamp === actionToRemove) return false;
+      if (typeof actionToRemove === 'object') {
+        if (q.localTimestamp && actionToRemove.localTimestamp && q.localTimestamp === actionToRemove.localTimestamp) return false;
+        // Fallback match for older stuck items
+        if (q.type === actionToRemove.type && JSON.stringify(q.payload) === JSON.stringify(actionToRemove.payload)) return false;
+      }
+      return true;
+    });
     if (this.actionQueue.length !== initialLen) {
       console.log(`[Sync] Manually removed pending action from queue.`);
       this.persistQueue();
