@@ -105,6 +105,7 @@ const ParticipantView: React.FC = () => {
   const [isLoginMode, setIsLoginMode] = useState(true);
   const [authError, setAuthError] = useState('');
   const [name, setName] = useState('');
+  const [guestNameInput, setGuestNameInput] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -201,22 +202,8 @@ const ParticipantView: React.FC = () => {
         const sess = await getSession(currentRoom || undefined);
         setSession(sess);
 
-        // Auto-login as Guest if they arrived via generic QR code
-        if (urlRoom && !sincUserId) {
-          console.log(`[Participant] Auto-generating Guest pass for QR scan...`);
-          try {
-            const guestName = generateArtistName();
-            const result = await registerUser({ name: guestName }, true);
-            if (result.success && result.profile) {
-              setUserProfile(result.profile);
-              const newPart = await joinSession(result.profile.id);
-              setParticipant(newPart);
-              await updateParticipantStatus(result.profile.id, ParticipantStatus.READY);
-            }
-          } catch (e) {
-            console.error("Auto-guest login failed:", e);
-          }
-        }
+        // Intentionally leaving users on the login page even if they scan a QR code
+        // so that they can input their custom username before hitting "SING!"
       }
       refresh();
     };
@@ -415,8 +402,8 @@ const ParticipantView: React.FC = () => {
   const handleGuestSingNow = async () => {
     setAuthError('');
     try {
-      const guestName = generateArtistName();
-      const result = await registerUser({ name: guestName }, true); // Auto-login true
+      const finalGuestName = guestNameInput.trim() || generateArtistName();
+      const result = await registerUser({ name: finalGuestName }, true); // Auto-login true
       if (result.success && result.profile) {
         const newPart = await joinSession(result.profile.id);
         setParticipant(newPart);
@@ -452,10 +439,17 @@ const ParticipantView: React.FC = () => {
         </h1>
         <p className="text-[var(--neon-cyan)] font-righteous mb-16 uppercase tracking-[0.6em] text-lg font-black neon-glow-cyan">SINGER LOGIN</p>
 
-        <div className="w-full max-w-lg mb-12 relative z-20">
+        <div className="w-full max-w-lg mb-12 relative z-20 space-y-4">
+          <input
+            type="text"
+            value={guestNameInput}
+            onChange={(e) => setGuestNameInput(e.target.value)}
+            placeholder="ENTER NAME OR LEAVE BLANK"
+            className="w-full bg-[#101015] border-2 border-[var(--neon-cyan)]/30 rounded-[2rem] px-8 py-5 text-white font-bold focus:border-[var(--neon-cyan)] outline-none transition-all shadow-[0_0_20px_rgba(0,229,255,0.1)] focus:shadow-[0_0_30px_rgba(0,229,255,0.3)] text-xl uppercase tracking-wider text-center font-righteous placeholder:text-slate-600"
+          />
           <button
             onClick={handleGuestSingNow}
-            className="w-full py-8 bg-gradient-to-r from-[var(--neon-pink)] via-[var(--neon-purple)] to-[var(--neon-blue)] text-white rounded-[2.5rem] font-black text-4xl shadow-[0_0_60px_rgba(255,0,127,0.4)] uppercase tracking-[0.1em] active:scale-95 transition-all font-bungee hover:brightness-110 border-4 border-white/10 animate-pulse"
+            className="w-full py-6 bg-gradient-to-r from-[var(--neon-pink)] via-[var(--neon-purple)] to-[var(--neon-blue)] text-white rounded-[2.5rem] font-black text-4xl shadow-[0_0_60px_rgba(255,0,127,0.4)] uppercase tracking-[0.1em] active:scale-95 transition-all font-bungee hover:brightness-110 border-4 border-white/10 animate-pulse mt-2"
           >
             SING!
           </button>
