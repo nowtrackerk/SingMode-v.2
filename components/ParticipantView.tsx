@@ -851,31 +851,88 @@ const ParticipantView: React.FC = () => {
 
       <main className="min-h-[300px] pb-32">
         {activeTab === 'ROTATION' && (
-          <section className="animate-in slide-in-from-bottom-8 duration-500 space-y-6">
-            <h3 className="text-[var(--neon-green)] font-black uppercase tracking-[0.3em] text-sm px-4 font-righteous opacity-80">{tx.comingUp}</h3>
-            <div className="space-y-4">
-              {(() => {
-                if (fullRotation.length === 0) return (
-                  <div className="text-center py-16 opacity-30 border-2 border-dashed border-white/5 rounded-[2.5rem] bg-black/20">
-                    <p className="text-sm font-black uppercase tracking-[0.4em] font-righteous text-slate-600">QUEUE EMPTY</p>
-                  </div>
-                );
+          <section className="animate-in slide-in-from-bottom-8 duration-500 space-y-10">
+            {/* Now Playing / Active Round */}
+            {session.currentRound && session.currentRound.length > 0 && (
+              <div className="space-y-6">
+                <div className="flex items-center gap-4 px-4">
+                  <div className="w-2.5 h-2.5 bg-[var(--neon-green)] rounded-full animate-ping shadow-[0_0_15px_var(--neon-green)]"></div>
+                  <h3 className="text-[var(--neon-green)] font-black uppercase tracking-[0.4em] text-sm font-righteous">{tx.onStage}</h3>
+                </div>
 
-                return fullRotation.map((req, i) => (
-                  <div key={req.id} className="bg-[#101015] border-2 border-white/5 p-6 rounded-[2rem] flex justify-between items-center group hover:border-[var(--neon-blue)] transition-all">
-                    <div className="min-w-0 pr-4">
-                      <div className="text-white font-bold uppercase truncate text-2xl font-bungee tracking-tight mb-1 group-hover:text-[var(--neon-blue)] transition-colors">{req.songName}</div>
-                      <div className="text-base text-[var(--neon-cyan)] uppercase tracking-[0.2em] flex items-center gap-2 font-righteous">
-                        {req.artist} <span className="text-white/20">|</span> <span className="text-slate-400">{req.participantName}</span>
+                <div className="space-y-3">
+                  {session.currentRound.map((song, i) => {
+                    // Find index of first non-done song to highlight current singer
+                    const activeIndex = session.currentRound!.findIndex(s => s.status !== RequestStatus.DONE);
+                    const isActive = i === (activeIndex === -1 ? 0 : activeIndex);
+                    const isDone = song.status === RequestStatus.DONE;
+
+                    return (
+                      <div
+                        key={song.id}
+                        className={`relative overflow-hidden p-6 rounded-[2.5rem] border-2 transition-all duration-500 shadow-2xl ${isActive
+                          ? 'bg-[#001005] border-[var(--neon-green)] scale-[1.02] z-10 shadow-[0_0_40px_rgba(0,255,157,0.2)]'
+                          : 'bg-[#101015] border-white/5 opacity-60'}`}
+                      >
+                        {isActive && (
+                          <div className="absolute top-0 right-10 py-1 px-4 bg-[var(--neon-green)] text-black text-[10px] font-black uppercase tracking-widest rounded-b-xl font-righteous animate-pulse">
+                            LIVE_NOW
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between gap-4">
+                          <div className="min-w-0 flex-1">
+                            <div className={`text-white font-black uppercase truncate text-3xl font-bungee tracking-tight mb-1 ${isActive ? 'neon-glow-green' : ''}`}>
+                              {song.songName}
+                            </div>
+                            <div className="flex items-center gap-3 text-lg font-righteous tracking-wider">
+                              <span className="text-[var(--neon-pink)] font-black">@{song.participantName}</span>
+                              <span className="text-white/20">|</span>
+                              <span className="text-slate-500 uppercase">{song.artist}</span>
+                            </div>
+                          </div>
+                          <div className={`w-14 h-14 rounded-2xl border-2 flex items-center justify-center font-black font-bungee text-2xl transition-all ${isActive ? 'bg-[var(--neon-green)] border-[var(--neon-green)] text-black shadow-[0_0_20px_var(--neon-green)]' : 'bg-black/40 border-white/10 text-slate-600'}`}>
+                            {song.requestNumber}
+                          </div>
+                        </div>
+                        {isDone && (
+                          <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] flex items-center justify-center">
+                            <span className="text-white/50 font-black uppercase tracking-[0.5em] text-sm border-2 border-white/20 px-6 py-2 rounded-full">PERFORMED</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="h-px bg-gradient-to-r from-transparent via-white/10 to-transparent mx-10"></div>
+              </div>
+            )}
+
+            <div className="space-y-6">
+              <h3 className="text-[var(--neon-cyan)] font-black uppercase tracking-[0.3em] text-sm px-4 font-righteous opacity-80">{tx.comingUp}</h3>
+              <div className="space-y-4">
+                {(() => {
+                  if (fullRotation.length === 0) return (
+                    <div className="text-center py-16 opacity-30 border-2 border-dashed border-white/5 rounded-[2.5rem] bg-black/20">
+                      <p className="text-sm font-black uppercase tracking-[0.4em] font-righteous text-slate-600">QUEUE EMPTY</p>
+                    </div>
+                  );
+
+                  return fullRotation.map((req, i) => (
+                    <div key={req.id} className="bg-[#101015] border-2 border-white/5 p-6 rounded-[2rem] flex justify-between items-center group hover:border-[var(--neon-blue)] transition-all">
+                      <div className="min-w-0 pr-4">
+                        <div className="text-white font-bold uppercase truncate text-2xl font-bungee tracking-tight mb-1 group-hover:text-[var(--neon-blue)] transition-colors">{req.songName}</div>
+                        <div className="text-base text-[var(--neon-cyan)] uppercase tracking-[0.2em] flex items-center gap-2 font-righteous">
+                          {req.artist} <span className="text-white/20">|</span> <span className="text-slate-400">{req.participantName}</span>
+                        </div>
+                      </div>
+                      <div className="shrink-0 w-12 h-12 rounded-full border border-[var(--neon-blue)]/50 bg-[var(--neon-blue)]/10 flex items-center justify-center text-[var(--neon-blue)] text-xl font-black font-bungee shadow-[0_0_15px_rgba(5,217,232,0.2)]">
+                        {i + 1}
                       </div>
                     </div>
-                    <div className="shrink-0 w-12 h-12 rounded-full border border-[var(--neon-blue)]/50 bg-[var(--neon-blue)]/10 flex items-center justify-center text-[var(--neon-blue)] text-xl font-black font-bungee shadow-[0_0_15px_rgba(5,217,232,0.2)]">
-                      {i + 1}
-                    </div>
-                  </div>
-                ));
-              })()}
+                  ));
+                })()}
 
+              </div>
             </div>
           </section>
         )}
