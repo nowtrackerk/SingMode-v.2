@@ -1229,6 +1229,9 @@ export const addRequest = async (request: Omit<SongRequest, 'id' | 'createdAt' |
     syncService.sendAction({ type: 'ADD_REQUEST', payload: request, senderId: request.participantId });
     return null;
   }
+
+  console.log(`[SessionManager] Processing new request from ${request.participantName}: ${request.songName}`);
+
   return await runSessionUpdate(async (session) => {
     const requestNumber = session.nextRequestNumber++;
     const newRequest: SongRequest = {
@@ -1256,6 +1259,7 @@ export const addRequest = async (request: Omit<SongRequest, 'id' | 'createdAt' |
     const userRequests = session.requests.filter(r => r.participantId === request.participantId && r.status === RequestStatus.PENDING);
 
     if (session.maxRequestsPerUser && userRequests.length >= session.maxRequestsPerUser) {
+      console.warn(`[SessionManager] Request limit reached for ${request.participantName}. Max ${session.maxRequestsPerUser} requests allowed per performer.`);
       throw new Error(`Request limit reached. Max ${session.maxRequestsPerUser} requests allowed per performer.`);
     }
 
@@ -1265,7 +1269,7 @@ export const addRequest = async (request: Omit<SongRequest, 'id' | 'createdAt' |
       r.artist.toLowerCase().trim() === request.artist.toLowerCase().trim()
     );
     if (isDuplicate) {
-      console.log("[SessionManager] Duplicate request detected, skipping:", request.songName);
+      console.warn(`[SessionManager] Duplicate request detected, skipping: ${request.songName} by ${request.participantName}`);
       return null;
     }
 
