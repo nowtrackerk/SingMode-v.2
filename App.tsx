@@ -33,12 +33,10 @@ const App: React.FC = () => {
       }
 
       try {
-        // Handle initial role and sync
-        if (room || sincUserId) {
-          setRole('PARTICIPANT');
-        } else if (view === 'DJ') {
+        // Handle initial role and sync - DJ VIEW TAKES PRECEDENCE
+        if (view === 'DJ') {
           setRole('DJ');
-        } else if (view === 'PARTICIPANT' || view === 'STAGE') {
+        } else if (room || sincUserId || view === 'PARTICIPANT' || view === 'STAGE') {
           setRole('PARTICIPANT');
         } else {
           setRole('SELECT');

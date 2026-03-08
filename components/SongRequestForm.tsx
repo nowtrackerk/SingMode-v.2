@@ -83,6 +83,7 @@ const SongRequestForm: React.FC<SongRequestFormProps> = ({
     if (showSingerName && !singerName) return;
 
     const duetPartner = participants.find(p => p.id === duetPartnerId);
+    console.log('[SongRequestForm] Submitting request:', { singerName, songName, artist, type });
     onSubmit({
       singerName,
       songName,

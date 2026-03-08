@@ -948,10 +948,23 @@ export const loginUserById = async (userId: string): Promise<{ success: boolean,
 
 
 export const logoutUser = async () => {
-  await signOut(auth);
-  if (isExtension) await (window as any).chrome.storage.local.remove([PROFILE_KEY]);
-  else localStorage.removeItem(PROFILE_KEY);
-  window.dispatchEvent(new Event('kstar_sync'));
+  try {
+    await signOut(auth);
+    // Clear all possible profile storage locations
+    localStorage.removeItem(PROFILE_KEY);
+    if (typeof window !== 'undefined' && (window as any).chrome?.storage?.local) {
+      // @ts-ignore
+      await window.chrome.storage.local.remove([PROFILE_KEY]);
+    }
+    // Force a sync event to update UI
+    window.dispatchEvent(new Event('kstar_sync'));
+    console.log("[SessionManager] User logged out and profile cleared.");
+  } catch (e) {
+    console.warn("[SessionManager] Logout error:", e);
+    // Fallback: still try to clear local storage
+    localStorage.removeItem(PROFILE_KEY);
+    window.dispatchEvent(new Event('kstar_sync'));
+  }
 };
 
 export const joinSession = async (profileId: string): Promise<Participant> => {

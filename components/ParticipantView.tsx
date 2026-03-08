@@ -585,7 +585,9 @@ const ParticipantView: React.FC = () => {
         <div className="fixed bottom-12 left-0 right-0 flex justify-center">
           <div className="px-4 py-2 bg-black/40 backdrop-blur-md border border-white/5 rounded-full flex items-center space-x-3">
             <div className={`w-2 h-2 rounded-full animate-ping ${connectionStatus === 'connected' ? 'bg-green-500' : 'bg-amber-500'}`}></div>
-            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Network: {connectionStatus}</span>
+            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+              Network: {connectionStatus} ({syncService.peer?.disconnected ? 'Cloud Fallback' : 'Real-time'})
+            </span>
           </div>
         </div>
       </div>
