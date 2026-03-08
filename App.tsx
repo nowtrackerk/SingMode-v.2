@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ViewRole } from './types';
 import DJView from './components/DJView';
 import ParticipantView from './components/ParticipantView';
-import { getSession, initializeSync, cleanupExpiredGuestAccounts } from './services/sessionManager';
+import { getSession, initializeSync, cleanupExpiredGuestAccounts, getActiveSessions } from './services/sessionManager';
 import { syncService } from './services/syncService';
 import { SingModeLogo } from './components/common/SingModeLogo';
 
@@ -65,10 +65,22 @@ const App: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      setRole(newRole);
       if (newRole === 'PARTICIPANT') {
+        // Auto-detect active session and redirect to it
+        const params = new URLSearchParams(window.location.search);
+        const existingRoom = params.get('room');
+        if (!existingRoom) {
+          const activeSessions = await getActiveSessions();
+          if (activeSessions.length > 0) {
+            // Redirect to the most recent active session
+            const targetSession = activeSessions[0];
+            window.location.search = `?room=${targetSession.id}`;
+            return; // Page will reload with room param
+          }
+        }
         await initializeSync(newRole);
       }
+      setRole(newRole);
     } catch (err: any) {
       setError(err.message);
       setRole('SELECT');
