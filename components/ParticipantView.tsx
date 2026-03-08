@@ -28,7 +28,7 @@ const generateArtistName = () => {
   return `${adj} ${noun} ${num}`;
 };
 
-type Tab = 'ROTATION' | 'REQUESTS' | 'FAVORITES' | 'HISTORY' | 'VOCALS';
+type Tab = 'ROTATION' | 'REQUESTS' | 'FAVORITES' | 'HISTORY' | 'VOCALS' | 'VIDEOS';
 
 const VideoLink: React.FC<{ url?: string }> = ({ url }) => {
   if (!url) return null;
@@ -54,6 +54,7 @@ const translations = {
     favorites: 'SONGBOOK',
     history: 'LOG',
     vocals: 'MIC SETUP',
+    videos: 'VIDEOS',
     sing: 'SING!',
     ready: 'READY',
     notYet: 'NOT YET',
@@ -72,6 +73,7 @@ const translations = {
     favorites: 'CATÁLOGO',
     history: 'HISTORIAL',
     vocals: 'CANTANTE',
+    videos: 'VIDEOS',
     sing: '¡CANTAR!',
     ready: 'LISTO',
     notYet: 'ESPERAR',
@@ -775,23 +777,24 @@ const ParticipantView: React.FC = () => {
       )}
 
       {/* Retro Arcade Tabs */}
-      <div className="grid grid-cols-5 gap-2 bg-[#0a0a0a] p-2 rounded-2xl border border-white/5 shadow-inner">
-        {(['ROTATION', 'REQUESTS', 'FAVORITES', 'HISTORY', 'VOCALS'] as Tab[]).map((tab) => (
+      <div className="flex bg-[#0a0a0a] p-2 rounded-2xl border border-white/5 shadow-inner overflow-x-auto snap-x scrollbar-hide mb-6 gap-2">
+        {(['ROTATION', 'REQUESTS', 'FAVORITES', 'HISTORY', 'VIDEOS', 'VOCALS'] as Tab[]).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all font-righteous flex flex-col items-center justify-center gap-1.5 ${activeTab === tab
+            className={`min-w-[4rem] flex-1 py-3 px-2 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all font-righteous flex flex-col items-center justify-center gap-1.5 shrink-0 snap-center ${activeTab === tab
               ? 'bg-[#151520] text-white shadow-[0_0_20px_rgba(255,255,255,0.05)] border border-white/10'
               : 'text-slate-600 hover:text-white hover:bg-white/5'
               }`}
           >
             <span className={`text-2xl mb-0.5 ${activeTab === tab ? 'text-[var(--neon-pink)]' : 'grayscale opacity-50'}`}>
-              {tab === 'ROTATION' ? '💿' : tab === 'REQUESTS' ? '📼' : tab === 'FAVORITES' ? '⭐' : tab === 'HISTORY' ? '📜' : '🎤'}
+              {tab === 'ROTATION' ? '💿' : tab === 'REQUESTS' ? '📼' : tab === 'FAVORITES' ? '⭐' : tab === 'HISTORY' ? '📜' : tab === 'VIDEOS' ? '📺' : '🎤'}
             </span>
             {tab === 'ROTATION' ? tx.rotation :
               tab === 'REQUESTS' ? tx.requests :
                 tab === 'FAVORITES' ? tx.favorites :
-                  tab === 'HISTORY' ? tx.history : tx.vocals}
+                  tab === 'HISTORY' ? tx.history :
+                    tab === 'VIDEOS' ? tx.videos : tx.vocals}
           </button>
         ))}
       </div>
@@ -990,8 +993,9 @@ const ParticipantView: React.FC = () => {
             <div className="grid gap-3">
               {(() => {
                 const combined = [
-                  ...userProfile.favorites.map(f => ({ ...f, isFavorite: true })),
+                  ...userProfile.favorites.filter(f => f.type !== RequestType.LISTENING).map(f => ({ ...f, isFavorite: true })),
                   ...(session?.verifiedSongbook || [])
+                    .filter(v => v.type !== RequestType.LISTENING)
                     .filter(v => !userProfile.favorites.some(f => f.songName === v.songName && f.artist === v.artist))
                     .map(v => ({ ...v, isFavorite: false }))
                 ].filter(song => !librarySearchQuery || song.songName.toLowerCase().includes(librarySearchQuery.toLowerCase()) || song.artist.toLowerCase().includes(librarySearchQuery.toLowerCase()));
@@ -1075,6 +1079,71 @@ const ParticipantView: React.FC = () => {
                 </div>
               ));
             })()}
+          </section>
+        )}
+
+        {activeTab === 'VIDEOS' && userProfile && (
+          <section className="animate-in slide-in-from-bottom-8 duration-500 space-y-6">
+            <div className="relative mb-6">
+              <input
+                type="text"
+                placeholder="SEARCH VIDEOS..."
+                value={librarySearchQuery}
+                onChange={(e) => setLibrarySearchQuery(e.target.value)}
+                className="w-full bg-[#101015] border-2 border-white/10 rounded-[2rem] py-5 px-6 pl-14 pr-14 text-xl font-bold uppercase tracking-wider text-[var(--neon-cyan)] focus:outline-none focus:border-[var(--neon-cyan)] transition-all font-righteous placeholder:text-slate-600 shadow-inner"
+              />
+              <span className="absolute left-6 top-1/2 -translate-y-1/2 text-2xl text-slate-600 group-focus-within:text-[var(--neon-cyan)] transition-colors">🔍</span>
+              {librarySearchQuery && (
+                <button
+                  onClick={() => setLibrarySearchQuery('')}
+                  className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors p-2"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            <div className="grid gap-3">
+              {(() => {
+                const videoItems = [
+                  ...userProfile.favorites.filter(f => f.type === RequestType.LISTENING).map(f => ({ ...f, isFavorite: true })),
+                  ...(session?.verifiedSongbook || [])
+                    .filter(v => v.type === RequestType.LISTENING)
+                    .filter(v => !userProfile.favorites.some(f => f.songName === v.songName && f.artist === v.artist))
+                    .map(v => ({ ...v, isFavorite: false }))
+                ].filter(song => !librarySearchQuery || song.songName.toLowerCase().includes(librarySearchQuery.toLowerCase()) || song.artist.toLowerCase().includes(librarySearchQuery.toLowerCase()));
+
+                if (videoItems.length === 0) return (
+                  <div className="text-center py-20 opacity-30 border-2 border-dashed border-white/5 rounded-[2.5rem] bg-black/20">
+                    <p className="text-sm font-black uppercase tracking-[0.4em] font-righteous text-slate-600">NO VIDEOS FOUND</p>
+                  </div>
+                );
+
+                return videoItems.map(song => (
+                  <div key={song.id} className="bg-[#101015] p-5 py-6 rounded-[2rem] flex justify-between items-center group border-2 border-[var(--neon-cyan)]/20 hover:border-[var(--neon-cyan)] transition-all">
+                    <div className="min-w-0 pr-4">
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="text-white font-bold uppercase truncate text-3xl font-bungee tracking-tight group-hover:text-[var(--neon-cyan)] transition-colors">{song.songName}</div>
+                        {song.isFavorite && <span className="text-xl text-[var(--neon-yellow)] animate-pulse">★</span>}
+                      </div>
+                      <div className="text-base text-slate-400 font-bold uppercase tracking-[0.2em] font-righteous">{song.artist}</div>
+                    </div>
+                    <div className="flex gap-4 items-center">
+                      <a
+                        href={song.youtubeUrl || `https://www.youtube.com/results?search_query=${encodeURIComponent(`${song.songName} ${song.artist} song`)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-center p-4 rounded-xl bg-[var(--neon-cyan)]/20 hover:bg-[var(--neon-cyan)] text-[var(--neon-cyan)] hover:text-black border border-[var(--neon-cyan)]/30 hover:border-transparent transition-all hover:scale-105 shadow-[0_0_15px_rgba(5,217,232,0.2)] hover:shadow-[0_0_25px_rgba(5,217,232,0.6)]"
+                        title="Watch Video"
+                      >
+                        <svg className="w-8 h-8 ml-1" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                      </a>
+                      <button onClick={async () => { await toggleFavorite(song); await refresh(); }} className={`px-2 transition-colors text-2xl ${song.isFavorite ? 'text-rose-500' : 'text-slate-700 hover:text-[var(--neon-yellow)]'}`}>{song.isFavorite ? '✕' : '★'}</button>
+                    </div>
+                  </div>
+                ));
+              })()}
+            </div>
           </section>
         )}
 
