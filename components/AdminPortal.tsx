@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { KaraokeSession } from '../types';
+import { KaraokeSession, VerifiedSong, RequestType } from '../types';
 import { getSession, saveSession, logoutUser, administrativeCleanup, cleanupStaleSessions } from '../services/sessionManager';
 import { db } from '../services/firebaseConfig';
 import { collection, getDocs, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
@@ -40,6 +40,8 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ onBack }) => {
     const [candidates, setCandidates] = useState<{ id: string, name: string }[]>([]);
     const [isScanning, setIsScanning] = useState(false);
     const [selectedId, setSelectedId] = useState<string>('');
+    const [isPopulatingLibrary, setIsPopulatingLibrary] = useState(false);
+    const [isRestoringAll, setIsRestoringAll] = useState(false);
 
     useEffect(() => {
         const load = async () => {
@@ -167,6 +169,132 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ onBack }) => {
         } catch (e: any) {
             alert("Restoration error: " + e.message);
         }
+    };
+
+    const populateLibraryFromHistory = async () => {
+        askConfirm('This will scan ALL session archives and add every unique song (with a YouTube URL) to the Songbook. Proceed?', async () => {
+            setIsPopulatingLibrary(true);
+            try {
+                const sessionsRef = collection(db, "sessions");
+                const sessionsSnap = await getDocs(sessionsRef);
+                const currentSession = await getSession();
+                const existingSongs = currentSession.verifiedSongbook || [];
+                let addedCount = 0;
+
+                for (const sessionDoc of sessionsSnap.docs) {
+                    const data = sessionDoc.data();
+                    if (!data.fullState) continue;
+                    try {
+                        const sess = JSON.parse(data.fullState);
+                        const allSongs = [...(sess.requests || []), ...(sess.history || [])];
+                        for (const song of allSongs) {
+                            if (!song.youtubeUrl || song.youtubeUrl.trim() === '') continue;
+                            if (song.status !== RequestStatus.DONE && song.status !== 'Approved') continue;
+
+                            const alreadyExists = existingSongs.some((s: any) =>
+                                s.songName.toLowerCase() === song.songName.toLowerCase() &&
+                                s.artist.toLowerCase() === song.artist.toLowerCase()
+                            );
+                            if (!alreadyExists) {
+                                const newVerified: VerifiedSong = {
+                                    id: Math.random().toString(36).substr(2, 9),
+                                    songName: song.songName,
+                                    artist: song.artist,
+                                    youtubeUrl: song.youtubeUrl,
+                                    type: song.type || RequestType.SINGING,
+                                    addedAt: Date.now()
+                                };
+                                existingSongs.push(newVerified);
+                                addedCount++;
+                            }
+                        }
+                    } catch (e) { }
+                }
+
+                currentSession.verifiedSongbook = existingSongs;
+                await saveSession(currentSession);
+                alert(`SUCCESS: Added ${addedCount} new songs to the Songbook Library.`);
+            } catch (e: any) {
+                alert('Failed to populate library: ' + e.message);
+            } finally {
+                setIsPopulatingLibrary(false);
+            }
+        });
+    };
+
+    const restoreAllUsersHistory = async () => {
+        askConfirm('This will scan ALL session archives and restore the singing history for EVERY user found. Proceed?', async () => {
+            setIsRestoringAll(true);
+            try {
+                const sessionsRef = collection(db, "sessions");
+                const sessionsSnap = await getDocs(sessionsRef);
+
+                // Collect all DONE songs grouped by participantId
+                const songsByUser = new Map<string, { songs: any[], name: string }>();
+
+                for (const sessionDoc of sessionsSnap.docs) {
+                    const data = sessionDoc.data();
+                    if (!data.fullState) continue;
+                    try {
+                        const sess = JSON.parse(data.fullState);
+                        const allSongs = [...(sess.requests || []), ...(sess.history || [])];
+                        for (const song of allSongs) {
+                            if (song.status !== RequestStatus.DONE || !song.participantId) continue;
+                            if (!songsByUser.has(song.participantId)) {
+                                songsByUser.set(song.participantId, { songs: [], name: song.participantName || 'Unknown' });
+                            }
+                            songsByUser.get(song.participantId)!.songs.push(song);
+                        }
+                    } catch (e) { }
+                }
+
+                let updatedUsersCount = 0;
+                let totalSongsRestored = 0;
+
+                for (const [userId, userData] of Array.from(songsByUser.entries())) {
+                    const userRef = doc(db, "users", userId);
+                    const userSnap = await getDoc(userRef);
+
+                    if (!userSnap.exists()) {
+                        await setDoc(userRef, {
+                            id: userId,
+                            name: userData.name,
+                            favorites: [],
+                            personalHistory: [],
+                            createdAt: Date.now()
+                        });
+                    }
+
+                    const currentUserObj = (await getDoc(userRef)).data();
+                    if (currentUserObj) {
+                        let pHistory = currentUserObj.personalHistory || [];
+                        let addedCount = 0;
+                        for (const song of userData.songs) {
+                            const exists = pHistory.some((h: any) =>
+                                h.id === song.id ||
+                                (h.songName.toLowerCase() === song.songName.toLowerCase() &&
+                                    h.artist.toLowerCase() === song.artist.toLowerCase())
+                            );
+                            if (!exists) {
+                                pHistory.unshift({ ...song, status: RequestStatus.DONE, completedAt: song.completedAt || Date.now() });
+                                addedCount++;
+                                totalSongsRestored++;
+                            }
+                        }
+                        if (addedCount > 0) {
+                            await updateDoc(userRef, { personalHistory: pHistory.slice(0, 50) });
+                            updatedUsersCount++;
+                        }
+                    }
+                }
+
+                alert(`SUCCESS: Restored history for ${updatedUsersCount} users (${totalSongsRestored} total songs added).`);
+            } catch (e: any) {
+                alert('Bulk restore failed: ' + e.message);
+            } finally {
+                setIsRestoringAll(false);
+            }
+        });
     };
 
     if (!session) return null;
@@ -355,6 +483,32 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ onBack }) => {
                                     className="px-6 py-3 bg-[var(--neon-purple)]/10 border border-[var(--neon-purple)] hover:bg-[var(--neon-purple)] text-[var(--neon-purple)] hover:text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
                                 >
                                     PURGE STALE SIGNALS
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col md:flex-row gap-6 mt-6">
+                            <div className="flex-1 p-6 bg-white/5 rounded-2xl border border-[var(--neon-cyan)] shadow-[0_0_20px_rgba(0,229,255,0.1)]">
+                                <h4 className="text-xs font-black uppercase tracking-widest mb-1 text-[var(--neon-cyan)]">Populate Songbook</h4>
+                                <p className="text-[9px] text-slate-500 uppercase font-bold mb-4">Scans all session archives and adds every unique song (with YouTube URL) to the Library</p>
+                                <button
+                                    onClick={populateLibraryFromHistory}
+                                    disabled={isPopulatingLibrary}
+                                    className={`w-full px-6 py-3 bg-[var(--neon-cyan)]/10 border border-[var(--neon-cyan)] hover:bg-[var(--neon-cyan)] text-[var(--neon-cyan)] hover:text-black rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${isPopulatingLibrary ? 'opacity-50' : ''}`}
+                                >
+                                    {isPopulatingLibrary ? 'POPULATING SONGBOOK...' : 'POPULATE SONGBOOK FROM HISTORY'}
+                                </button>
+                            </div>
+
+                            <div className="flex-1 p-6 bg-white/5 rounded-2xl border border-[var(--neon-pink)] shadow-[0_0_20px_rgba(255,42,109,0.1)]">
+                                <h4 className="text-xs font-black uppercase tracking-widest mb-1 text-[var(--neon-pink)]">Bulk History Restore</h4>
+                                <p className="text-[9px] text-slate-500 uppercase font-bold mb-4">Restores every user's singing log from all session archives in one click</p>
+                                <button
+                                    onClick={restoreAllUsersHistory}
+                                    disabled={isRestoringAll}
+                                    className={`w-full px-6 py-3 bg-[var(--neon-pink)]/10 border border-[var(--neon-pink)] hover:bg-[var(--neon-pink)] text-[var(--neon-pink)] hover:text-black rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${isRestoringAll ? 'opacity-50' : ''}`}
+                                >
+                                    {isRestoringAll ? 'RESTORING ALL HISTORIES...' : 'RESTORE ALL USERS HISTORY'}
                                 </button>
                             </div>
                         </div>
