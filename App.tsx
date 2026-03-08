@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ViewRole } from './types';
 import DJView from './components/DJView';
 import ParticipantView from './components/ParticipantView';
-import { getSession, initializeSync, cleanupExpiredGuestAccounts, getActiveSessions } from './services/sessionManager';
+import { getSession, initializeSync, cleanupExpiredGuestAccounts, getActiveSessions, getUserProfile } from './services/sessionManager';
 import { syncService } from './services/syncService';
 import { SingModeLogo } from './components/common/SingModeLogo';
 
@@ -33,11 +33,33 @@ const App: React.FC = () => {
       }
 
       try {
+        // Detect mobile device
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
         // Handle initial role and sync - DJ VIEW TAKES PRECEDENCE
         if (view === 'DJ') {
           setRole('DJ');
         } else if (room || sincUserId || view === 'PARTICIPANT' || view === 'STAGE') {
           setRole('PARTICIPANT');
+        } else if (isMobile) {
+          // Mobile users: auto-redirect to PARTICIPANT unless they are Jacob or an admin
+          const storedProfile = await getUserProfile();
+          const isPrivilegedUser = storedProfile && (
+            storedProfile.isAdmin ||
+            storedProfile.name?.toLowerCase() === 'jacob'
+          );
+
+          if (isPrivilegedUser) {
+            setRole('SELECT');
+          } else {
+            // Auto-detect active session and redirect
+            const activeSessions = await getActiveSessions();
+            if (activeSessions.length > 0) {
+              window.location.search = `?room=${activeSessions[0].id}`;
+              return; // Page will reload with room param
+            }
+            setRole('PARTICIPANT');
+          }
         } else {
           setRole('SELECT');
         }
