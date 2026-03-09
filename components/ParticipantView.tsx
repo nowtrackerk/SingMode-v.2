@@ -237,6 +237,16 @@ const ParticipantView: React.FC = () => {
 
       // Cleanup listener on unmount
       return () => unsub();
+    } else if (!effectiveRoomId && !isInitialized.current) {
+      // Fallback: No room param provided — auto-discover active session from Firebase
+      console.log('[Participant] No room param — auto-discovering active sessions...');
+      getActiveSessions().then(sessions => {
+        if (sessions.length > 0) {
+          const targetSession = sessions[0];
+          console.log(`[Participant] Found active session: ${targetSession.id}, redirecting...`);
+          window.location.search = `?room=${targetSession.id}`;
+        }
+      }).catch(e => console.error('[Participant] Session discovery failed:', e));
     }
 
     syncService.onConnectionStatus = (status) => {
