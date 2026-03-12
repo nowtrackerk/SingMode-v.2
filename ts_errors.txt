@@ -1,0 +1,2 @@
+components/ParticipantView.tsx(599,57): error TS2341: Property 'peer' is private and only accessible within class 'SyncService'.
+OldVersion/components/ParticipantView.tsx(589,57): error TS2341: Property 'peer' is private and only accessible within class 'SyncService'.

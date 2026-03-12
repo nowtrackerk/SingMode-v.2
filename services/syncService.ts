@@ -4,7 +4,7 @@ import { db } from './firebaseConfig';
 import { collection, addDoc } from "firebase/firestore";
 
 class SyncService {
-  private peer: Peer | null = null;
+  public peer: Peer | null = null;
   private lockPeer: Peer | null = null; // Separate peer to "hold" the network lock
   private connections: Map<string, DataConnection> = new Map();
   private hostId: string | null = null;
@@ -277,9 +277,11 @@ class SyncService {
 
   broadcastState(state: KaraokeSession) {
     if (!this.isHost) return;
+    // Omit verifiedSongbook from real-time WebRTC broadcast to prevent choking
+    const broadcastPayload = { ...state, verifiedSongbook: [] };
     this.connections.forEach(conn => {
       if (conn.open) {
-        conn.send(state);
+        conn.send(broadcastPayload);
       }
     });
   }

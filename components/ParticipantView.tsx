@@ -119,6 +119,7 @@ const ParticipantView: React.FC = () => {
 
   const [showQrModal, setShowQrModal] = useState(false);
   const [librarySearchQuery, setLibrarySearchQuery] = useState('');
+  const [libraryPage, setLibraryPage] = useState(1);
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
   const [showSessionScanner, setShowSessionScanner] = useState(false);
@@ -1045,7 +1046,10 @@ const ParticipantView: React.FC = () => {
                 type="text"
                 placeholder={tx.searchBook}
                 value={librarySearchQuery}
-                onChange={(e) => setLibrarySearchQuery(e.target.value)}
+                onChange={(e) => {
+                  setLibrarySearchQuery(e.target.value);
+                  setLibraryPage(1);
+                }}
                 className="w-full bg-[#101015] border-2 border-white/10 rounded-[2rem] py-5 px-6 pl-14 pr-14 text-xl font-bold uppercase tracking-wider text-white focus:outline-none focus:border-[var(--neon-pink)] transition-all font-righteous placeholder:text-slate-600 shadow-inner"
               />
               <span className="absolute left-6 top-1/2 -translate-y-1/2 text-2xl text-slate-600 group-focus-within:text-[var(--neon-pink)] transition-colors">🔍</span>
@@ -1071,31 +1075,69 @@ const ParticipantView: React.FC = () => {
 
                 if (combined.length === 0) return <div className="text-center py-20 opacity-30 font-righteous text-sm uppercase tracking-widest text-slate-500">{tx.noMatches}</div>;
 
-                return combined.map(song => (
-                  <div key={song.id} className="bg-[#101015] p-5 rounded-[2rem] flex justify-between items-center group border-2 border-white/5 hover:border-[var(--neon-yellow)] transition-all">
-                    <div className="min-w-0 pr-4">
-                      <div className="flex items-center gap-3 mb-1">
-                        <div className="text-white font-bold uppercase truncate text-2xl font-bungee tracking-tight group-hover:text-[var(--neon-yellow)] transition-colors">{song.songName}</div>
-                        <a
-                          href={song.youtubeUrl || `https://www.youtube.com/results?search_query=${encodeURIComponent(`${song.songName} ${song.artist} karaoke`)}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center justify-center w-8 h-8 rounded-full bg-white/5 hover:bg-[var(--neon-cyan)] text-[var(--neon-cyan)] hover:text-black border border-[var(--neon-cyan)]/30 hover:border-transparent transition-all hover:scale-110 shadow-[0_0_10px_rgba(5,217,232,0)] hover:shadow-[0_0_15px_rgba(5,217,232,0.6)]"
-                          title="Listen on YouTube"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <svg className="w-3.5 h-3.5 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
-                        </a>
-                        {song.isFavorite && <span className="text-lg text-[var(--neon-yellow)] animate-pulse">★</span>}
+                const ITEMS_PER_PAGE = 50;
+                const totalPages = Math.ceil(combined.length / ITEMS_PER_PAGE);
+                const startIndex = (libraryPage - 1) * ITEMS_PER_PAGE;
+                const paginatedSongs = combined.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+
+                return (
+                  <>
+                    {paginatedSongs.map(song => (
+                      <div key={song.id} className="bg-[#101015] p-5 rounded-[2rem] flex justify-between items-center group border-2 border-white/5 hover:border-[var(--neon-yellow)] transition-all">
+                        <div className="min-w-0 pr-4">
+                          <div className="flex items-center gap-3 mb-1">
+                            <div className="text-white font-bold uppercase truncate text-2xl font-bungee tracking-tight group-hover:text-[var(--neon-yellow)] transition-colors">{song.songName}</div>
+                            <a
+                              href={song.youtubeUrl || `https://www.youtube.com/results?search_query=${encodeURIComponent(`${song.songName} ${song.artist} karaoke`)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center justify-center w-8 h-8 rounded-full bg-white/5 hover:bg-[var(--neon-cyan)] text-[var(--neon-cyan)] hover:text-black border border-[var(--neon-cyan)]/30 hover:border-transparent transition-all hover:scale-110 shadow-[0_0_10px_rgba(5,217,232,0)] hover:shadow-[0_0_15px_rgba(5,217,232,0.6)]"
+                              title="Listen on YouTube"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <svg className="w-3.5 h-3.5 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                            </a>
+                            {song.isFavorite && <span className="text-lg text-[var(--neon-yellow)] animate-pulse">★</span>}
+                          </div>
+                          <div className="text-sm text-slate-400 font-bold uppercase tracking-[0.2em] font-righteous">{song.artist}</div>
+                        </div>
+                        <div className="flex gap-3">
+                          <button onClick={() => { setPrefillData({ ...song }); setShowRequestForm(true); }} className="bg-[var(--neon-pink)] text-black px-4 py-2 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-white transition-all font-righteous shadow-[0_0_15px_rgba(255,0,127,0.3)] hover:scale-105 active:scale-95">ADD</button>
+                          <button onClick={async () => { await toggleFavorite(song); await refresh(); }} className={`px-2 transition-colors ${song.isFavorite ? 'text-rose-500' : 'text-slate-700 hover:text-[var(--neon-yellow)]'}`}>{song.isFavorite ? '✕' : '★'}</button>
+                        </div>
                       </div>
-                      <div className="text-sm text-slate-400 font-bold uppercase tracking-[0.2em] font-righteous">{song.artist}</div>
-                    </div>
-                    <div className="flex gap-3">
-                      <button onClick={() => { setPrefillData({ ...song }); setShowRequestForm(true); }} className="bg-[var(--neon-pink)] text-black px-4 py-2 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-white transition-all font-righteous shadow-[0_0_15px_rgba(255,0,127,0.3)] hover:scale-105 active:scale-95">ADD</button>
-                      <button onClick={async () => { await toggleFavorite(song); await refresh(); }} className={`px-2 transition-colors ${song.isFavorite ? 'text-rose-500' : 'text-slate-700 hover:text-[var(--neon-yellow)]'}`}>{song.isFavorite ? '✕' : '★'}</button>
-                    </div>
-                  </div>
-                ));
+                    ))}
+
+                    {totalPages > 1 && (
+                      <div className="flex justify-between items-center bg-[#0a0a0a] border-2 border-white/5 rounded-2xl p-4 mt-6">
+                        <button
+                          onClick={() => setLibraryPage(p => Math.max(1, p - 1))}
+                          disabled={libraryPage === 1}
+                          className="px-6 py-3 bg-white/10 hover:bg-white/20 disabled:opacity-30 rounded-xl font-black font-righteous uppercase transition-all text-white border border-white/10 tracking-widest text-sm"
+                        >
+                          ◀ PREV
+                        </button>
+
+                        <div className="flex flex-col items-center">
+                          <span className="text-[var(--neon-yellow)] font-black uppercase tracking-[0.3em] text-lg font-righteous mb-1">
+                            PAGE {libraryPage} <span className="text-white/30 text-sm">/ {totalPages}</span>
+                          </span>
+                          <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
+                            {combined.length} TOTAL TRACKS
+                          </span>
+                        </div>
+
+                        <button
+                          onClick={() => setLibraryPage(p => Math.min(totalPages, p + 1))}
+                          disabled={libraryPage === totalPages}
+                          className="px-6 py-3 bg-[var(--neon-yellow)] hover:bg-white text-black disabled:opacity-30 rounded-xl font-black font-righteous uppercase transition-all shadow-[0_0_15px_rgba(255,255,0,0.3)] disabled:shadow-none tracking-widest text-sm"
+                        >
+                          NEXT ▶
+                        </button>
+                      </div>
+                    )}
+                  </>
+                );
               })()}
             </div>
           </section>
@@ -1188,29 +1230,67 @@ const ParticipantView: React.FC = () => {
                   </div>
                 );
 
-                return videoItems.map(song => (
-                  <div key={song.id} className="bg-[#101015] p-5 py-6 rounded-[2rem] flex justify-between items-center group border-2 border-[var(--neon-cyan)]/20 hover:border-[var(--neon-cyan)] transition-all">
-                    <div className="min-w-0 pr-4">
-                      <div className="flex items-center gap-3 mb-2">
-                        <div className="text-white font-bold uppercase truncate text-3xl font-bungee tracking-tight group-hover:text-[var(--neon-cyan)] transition-colors">{song.songName}</div>
-                        {song.isFavorite && <span className="text-xl text-[var(--neon-yellow)] animate-pulse">★</span>}
+                const ITEMS_PER_PAGE = 50;
+                const totalPages = Math.ceil(videoItems.length / ITEMS_PER_PAGE);
+                const startIndex = (libraryPage - 1) * ITEMS_PER_PAGE;
+                const paginatedVideos = videoItems.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+
+                return (
+                  <>
+                    {paginatedVideos.map(song => (
+                      <div key={song.id} className="bg-[#101015] p-5 py-6 rounded-[2rem] flex justify-between items-center group border-2 border-[var(--neon-cyan)]/20 hover:border-[var(--neon-cyan)] transition-all">
+                        <div className="min-w-0 pr-4">
+                          <div className="flex items-center gap-3 mb-2">
+                            <div className="text-white font-bold uppercase truncate text-3xl font-bungee tracking-tight group-hover:text-[var(--neon-cyan)] transition-colors">{song.songName}</div>
+                            {song.isFavorite && <span className="text-xl text-[var(--neon-yellow)] animate-pulse">★</span>}
+                          </div>
+                          <div className="text-base text-slate-400 font-bold uppercase tracking-[0.2em] font-righteous">{song.artist}</div>
+                        </div>
+                        <div className="flex gap-4 items-center">
+                          <a
+                            href={song.youtubeUrl || `https://www.youtube.com/results?search_query=${encodeURIComponent(`${song.songName} ${song.artist} song`)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center justify-center p-4 rounded-xl bg-[var(--neon-cyan)]/20 hover:bg-[var(--neon-cyan)] text-[var(--neon-cyan)] hover:text-black border border-[var(--neon-cyan)]/30 hover:border-transparent transition-all hover:scale-105 shadow-[0_0_15px_rgba(5,217,232,0.2)] hover:shadow-[0_0_25px_rgba(5,217,232,0.6)]"
+                            title="Watch Video"
+                          >
+                            <svg className="w-8 h-8 ml-1" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                          </a>
+                          <button onClick={async () => { await toggleFavorite(song); await refresh(); }} className={`px-2 transition-colors text-2xl ${song.isFavorite ? 'text-rose-500' : 'text-slate-700 hover:text-[var(--neon-yellow)]'}`}>{song.isFavorite ? '✕' : '★'}</button>
+                        </div>
                       </div>
-                      <div className="text-base text-slate-400 font-bold uppercase tracking-[0.2em] font-righteous">{song.artist}</div>
-                    </div>
-                    <div className="flex gap-4 items-center">
-                      <a
-                        href={song.youtubeUrl || `https://www.youtube.com/results?search_query=${encodeURIComponent(`${song.songName} ${song.artist} song`)}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center justify-center p-4 rounded-xl bg-[var(--neon-cyan)]/20 hover:bg-[var(--neon-cyan)] text-[var(--neon-cyan)] hover:text-black border border-[var(--neon-cyan)]/30 hover:border-transparent transition-all hover:scale-105 shadow-[0_0_15px_rgba(5,217,232,0.2)] hover:shadow-[0_0_25px_rgba(5,217,232,0.6)]"
-                        title="Watch Video"
-                      >
-                        <svg className="w-8 h-8 ml-1" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
-                      </a>
-                      <button onClick={async () => { await toggleFavorite(song); await refresh(); }} className={`px-2 transition-colors text-2xl ${song.isFavorite ? 'text-rose-500' : 'text-slate-700 hover:text-[var(--neon-yellow)]'}`}>{song.isFavorite ? '✕' : '★'}</button>
-                    </div>
-                  </div>
-                ));
+                    ))}
+
+                    {totalPages > 1 && (
+                      <div className="flex justify-between items-center bg-[#0a0a0a] border-2 border-white/5 rounded-2xl p-4 mt-6">
+                        <button
+                          onClick={() => setLibraryPage(p => Math.max(1, p - 1))}
+                          disabled={libraryPage === 1}
+                          className="px-6 py-3 bg-white/10 hover:bg-white/20 disabled:opacity-30 rounded-xl font-black font-righteous uppercase transition-all text-white border border-white/10 tracking-widest text-sm"
+                        >
+                          ◀ PREV
+                        </button>
+
+                        <div className="flex flex-col items-center">
+                          <span className="text-[var(--neon-cyan)] font-black uppercase tracking-[0.3em] text-lg font-righteous mb-1">
+                            PAGE {libraryPage} <span className="text-white/30 text-sm">/ {totalPages}</span>
+                          </span>
+                          <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
+                            {videoItems.length} TOTAL VIDEOS
+                          </span>
+                        </div>
+
+                        <button
+                          onClick={() => setLibraryPage(p => Math.min(totalPages, p + 1))}
+                          disabled={libraryPage === totalPages}
+                          className="px-6 py-3 bg-[var(--neon-cyan)] hover:bg-white text-black disabled:opacity-30 rounded-xl font-black font-righteous uppercase transition-all shadow-[0_0_15px_rgba(0,229,255,0.3)] disabled:shadow-none tracking-widest text-sm"
+                        >
+                          NEXT ▶
+                        </button>
+                      </div>
+                    )}
+                  </>
+                );
               })()}
             </div>
           </section>

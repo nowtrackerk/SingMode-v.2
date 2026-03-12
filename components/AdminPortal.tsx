@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { KaraokeSession, VerifiedSong, RequestType } from '../types';
-import { getSession, saveSession, logoutUser, administrativeCleanup, cleanupStaleSessions } from '../services/sessionManager';
+import { getSession, saveSession, saveSongbookLocally, logoutUser, administrativeCleanup, cleanupStaleSessions, broadcastSongbookReload } from '../services/sessionManager';
 import { db } from '../services/firebaseConfig';
 import { collection, getDocs, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { RequestStatus } from '../types';
@@ -42,6 +42,7 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ onBack }) => {
     const [selectedId, setSelectedId] = useState<string>('');
     const [isPopulatingLibrary, setIsPopulatingLibrary] = useState(false);
     const [isRestoringAll, setIsRestoringAll] = useState(false);
+    const [isImporting, setIsImporting] = useState(false);
 
     useEffect(() => {
         const load = async () => {
@@ -192,8 +193,9 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ onBack }) => {
                             if (song.status !== RequestStatus.DONE && song.status !== 'Approved') continue;
 
                             const alreadyExists = existingSongs.some((s: any) =>
-                                s.songName.toLowerCase() === song.songName.toLowerCase() &&
-                                s.artist.toLowerCase() === song.artist.toLowerCase()
+                                s.youtubeUrl === song.youtubeUrl ||
+                                (s.songName.toLowerCase() === song.songName.toLowerCase() &&
+                                    s.artist.toLowerCase() === song.artist.toLowerCase())
                             );
                             if (!alreadyExists) {
                                 const newVerified: VerifiedSong = {
@@ -211,13 +213,14 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ onBack }) => {
                     } catch (e) { }
                 }
 
-                currentSession.verifiedSongbook = existingSongs;
-                await saveSession(currentSession);
+                await saveSongbookLocally(existingSongs);
+                await broadcastSongbookReload();
                 alert(`SUCCESS: Added ${addedCount} new songs to the Songbook Library.`);
             } catch (e: any) {
                 alert('Failed to populate library: ' + e.message);
             } finally {
                 setIsPopulatingLibrary(false);
+                setIsRestoringAll(false);
             }
         });
     };
@@ -294,6 +297,165 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ onBack }) => {
             } finally {
                 setIsRestoringAll(false);
             }
+        });
+    };
+
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        askConfirm(`Import songs from ${file.name}? This will add new unique songs to your Songbook.`, async () => {
+            setIsImporting(true);
+            const reader = new FileReader();
+            reader.onload = async (event) => {
+                try {
+                    const content = event.target?.result as string;
+                    let songs: any[] = [];
+
+                    if (file.name.endsWith('.json')) {
+                        const data = JSON.parse(content);
+
+                        // 1. Detect Chrome Browser History export format
+                        if (data["Browser History"] && Array.isArray(data["Browser History"])) {
+                            songs = data["Browser History"]
+                                .filter((item: any) =>
+                                    item.url &&
+                                    item.url.includes('youtube.com/watch') &&
+                                    item.title &&
+                                    (item.title.toLowerCase().includes('karaoke') || item.title.toLowerCase().includes('lyrics'))
+                                )
+                                .map((item: any) => {
+                                    // Title format is usually: "Song Title - Artist (Karaoke) - YouTube"
+                                    let rawTitle = item.title.replace(/\s*-\s*YouTube$/i, '').trim();
+                                    let artist = 'Unknown Artist';
+                                    let songName = rawTitle;
+
+                                    // Remove trailing (Karaoke) or [Lyrics]
+                                    rawTitle = rawTitle.replace(/\s*[\[\(]?(Karaoke|Lyrics|Instrumental|Versión Karaoke)[\]\)]?/gi, '').trim();
+
+                                    // Attempt to split into Artist and Song if " - " exists
+                                    if (rawTitle.includes(' - ')) {
+                                        const parts = rawTitle.split(' - ');
+                                        // Assume Song - Artist format
+                                        songName = parts[0].trim();
+                                        artist = parts.slice(1).join(' - ').trim();
+                                    } else {
+                                        songName = rawTitle;
+                                    }
+
+                                    return {
+                                        songName: songName,
+                                        artist: artist,
+                                        youtubeUrl: item.url
+                                    };
+                                });
+                        } else {
+                            // 2. Detect Google Takeout YouTube History format or Generic
+                            const rawSongs = Array.isArray(data) ? data : [data];
+
+                            if (rawSongs.length > 0 && rawSongs[0].header === 'YouTube' && rawSongs[0].titleUrl) {
+                                songs = rawSongs.map((item: any) => {
+                                    // Takeout titles look like "Watched Artist - Song Title"
+                                    let rawTitle = item.title?.replace(/^Watched /i, '') || 'Unknown Song';
+                                    let artist = item.subtitles?.[0]?.name || 'Unknown Artist';
+
+                                    // Clean up " - Topic" or "VEVO" from channel names
+                                    artist = artist.replace(/ - Topic$/i, '').replace(/VEVO$/i, '');
+
+                                    // Try to split title if it has " - " (Common format: Artist - Song)
+                                    if (rawTitle.includes(' - ')) {
+                                        const parts = rawTitle.split(' - ');
+                                        // if channel name is generic, use the parsed artist
+                                        if (artist.includes('Unknown') || artist.toLowerCase().includes('karaoke')) {
+                                            artist = parts[0].trim();
+                                        }
+                                        rawTitle = parts.slice(1).join(' - ').trim();
+                                    }
+
+                                    // Remove annoying trailing metadata often found in titles
+                                    rawTitle = rawTitle.replace(/\s*\(?(Official\s*(Video|Music Video|Audio|Lyric Video)?|Lyrics?|Remaster(?:ed)?)\)?/i, '').trim();
+
+                                    return {
+                                        songName: rawTitle,
+                                        artist: artist,
+                                        youtubeUrl: item.titleUrl
+                                    };
+                                }).filter((s: any) => s.youtubeUrl);
+                            } else {
+                                // 3. Generic JSON format fallback
+                                songs = rawSongs;
+                            }
+                        }
+                    } else if (file.name.endsWith('.csv')) {
+                        const lines = content.split('\n');
+                        const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+
+                        // Detect indices
+                        const nameIdx = headers.indexOf('song') > -1 ? headers.indexOf('song') : headers.indexOf('title') > -1 ? headers.indexOf('title') : 0;
+                        const artistIdx = headers.indexOf('artist') > -1 ? headers.indexOf('artist') : 1;
+                        const urlIdx = headers.indexOf('url') > -1 ? headers.indexOf('url') : headers.indexOf('link') > -1 ? headers.indexOf('link') : 2;
+
+                        songs = lines.slice(1).map(line => {
+                            const cells = line.split(',').map(s => s.trim());
+                            return {
+                                songName: cells[nameIdx],
+                                artist: cells[artistIdx],
+                                youtubeUrl: cells[urlIdx]
+                            };
+                        }).filter(s => s.songName && s.youtubeUrl);
+                    }
+
+                    if (songs.length === 0) {
+                        alert("No valid songs found in the file. Ensure CSV has headers: Song, Artist, URL");
+                        return;
+                    }
+
+                    const currentSession = await getSession();
+                    const existingSongs = currentSession.verifiedSongbook || [];
+                    let addedCount = 0;
+
+                    songs = songs.filter((song, index, self) =>
+                        index === self.findIndex((t) => (
+                            t.youtubeUrl === song.youtubeUrl
+                        ))
+                    );
+
+                    songs.forEach(song => {
+                        if (!song.youtubeUrl || song.youtubeUrl.trim() === '') return;
+
+                        // Check if URL already exists in Songbook
+                        const urlExists = existingSongs.some((s: any) => s.youtubeUrl === song.youtubeUrl);
+
+                        // Check if Title+Artist combo already exists
+                        const nameExists = existingSongs.some((s: any) =>
+                            s.songName.toLowerCase() === song.songName?.toLowerCase() &&
+                            s.artist.toLowerCase() === song.artist?.toLowerCase()
+                        );
+
+                        if (!urlExists && !nameExists) {
+                            existingSongs.push({
+                                id: Math.random().toString(36).substr(2, 9),
+                                songName: song.songName || "Unknown Song",
+                                artist: song.artist || "Unknown Artist",
+                                youtubeUrl: song.youtubeUrl,
+                                type: song.type || RequestType.SINGING,
+                                addedAt: Date.now()
+                            });
+                            addedCount++;
+                        }
+                    });
+
+                    await saveSongbookLocally(existingSongs);
+                    await broadcastSongbookReload();
+                    alert(`SUCCESS: Imported ${addedCount} new songs to the Songbook.`);
+                } catch (e: any) {
+                    alert("Import failed: " + e.message);
+                } finally {
+                    setIsImporting(false);
+                    e.target.value = '';
+                }
+            };
+            reader.readAsText(file);
         });
     };
 
@@ -510,6 +672,28 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ onBack }) => {
                                 >
                                     {isRestoringAll ? 'RESTORING ALL HISTORIES...' : 'RESTORE ALL USERS HISTORY'}
                                 </button>
+                            </div>
+                        </div>
+
+                        <div className="mt-10 p-10 bg-white/5 rounded-[3rem] border-2 border-dashed border-white/10 text-center group hover:border-[var(--neon-cyan)] transition-all">
+                            <h3 className="text-xl font-bungee text-white mb-2 uppercase">Bulk Import External Songbook</h3>
+                            <p className="text-[10px] text-slate-500 uppercase tracking-widest font-black mb-6">Upload a JSON or CSV file to bridge external libraries</p>
+
+                            <label className={`inline-flex items-center gap-4 px-10 py-5 rounded-2xl cursor-pointer transition-all ${isImporting ? 'bg-[var(--neon-cyan)] text-black animate-pulse' : 'bg-white/5 border-2 border-white/10 hover:border-[var(--neon-cyan)] text-white hover:text-[var(--neon-cyan)]'}`}>
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                                <span className="font-black uppercase tracking-widest text-xs">{isImporting ? 'UPLOADING...' : 'SELECT HISTORY FILE'}</span>
+                                <input
+                                    type="file"
+                                    accept=".json,.csv"
+                                    className="hidden"
+                                    onChange={handleFileUpload}
+                                    disabled={isImporting}
+                                />
+                            </label>
+
+                            <div className="mt-6 grid grid-cols-2 gap-4 max-w-sm mx-auto">
+                                <div className="text-[8px] text-slate-600 uppercase font-black text-right">SUPPORTED FORMATS:</div>
+                                <div className="text-[8px] text-[var(--neon-cyan)] uppercase font-black text-left">JSON, CSV (SONG, ARTIST, URL)</div>
                             </div>
                         </div>
                     </section>

@@ -176,6 +176,7 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
   const [pickerSearch, setPickerSearch] = useState('');
   const [qrTargetUser, setQrTargetUser] = useState<UserProfile | null>(null); // For User SINC QR
   const [librarySearchQuery, setLibrarySearchQuery] = useState('');
+  const [libraryPage, setLibraryPage] = useState(1);
   const [lastSessionName, setLastSessionName] = useState<string | null>(localStorage.getItem('singmode_last_session_name'));
 
   // Audio Refs for Monitoring
@@ -1303,11 +1304,28 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
               <section className="bg-[#0a0a0a] border-4 border-white/5 rounded-[3rem] p-8 shadow-[0_0_40px_rgba(0,0,0,0.5)] relative overflow-hidden flex flex-col h-[600px]">
                 <div className="flex justify-between items-center mb-6 px-2">
                   <h2 className="text-4xl font-bold font-bungee text-white uppercase tracking-tight opacity-90">PERFORMERS</h2>
-                  <div className="flex items-center gap-2 bg-white/5 px-3 py-1 rounded-full border border-white/5">
-                    <div className="w-2 h-2 rounded-full bg-[var(--neon-cyan)] animate-pulse"></div>
-                    <span className="text-sm text-[var(--neon-cyan)] font-bold uppercase tracking-widest">{liveMicCount} ONLINE</span>
+                  <div className="flex items-center gap-2">
+                    {session.participants.length > 0 && (
+                      <button
+                        onClick={() => askConfirm('Disconnect ALL performers from this session?', async () => {
+                          for (const p of session.participants) {
+                            await removeParticipant(p.id);
+                          }
+                          await refresh();
+                        })}
+                        title="Disconnect All Performers"
+                        className="w-7 h-7 flex items-center justify-center rounded-lg bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white border border-rose-500/20 transition-all text-xs font-black"
+                      >
+                        ✕
+                      </button>
+                    )}
+                    <div className="flex items-center gap-2 bg-white/5 px-3 py-1 rounded-full border border-white/5">
+                      <div className="w-2 h-2 rounded-full bg-[var(--neon-cyan)] animate-pulse"></div>
+                      <span className="text-sm text-[var(--neon-cyan)] font-bold uppercase tracking-widest">{liveMicCount} ONLINE</span>
+                    </div>
                   </div>
                 </div>
+
                 <div className="space-y-3 overflow-y-auto custom-scrollbar pr-2 flex-1">
                   {session.participants.map((p, i) => {
                     const isReady = p.status === ParticipantStatus.READY;
@@ -1670,7 +1688,10 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
                     type="text"
                     placeholder="SEARCH SONGBOOK..."
                     value={librarySearchQuery}
-                    onChange={(e) => setLibrarySearchQuery(e.target.value)}
+                    onChange={(e) => {
+                      setLibrarySearchQuery(e.target.value);
+                      setLibraryPage(1);
+                    }}
                     className="relative z-10 w-full bg-black/50 border-2 border-white/10 rounded-[2.3rem] py-6 pl-16 pr-40 text-2xl font-bold tracking-widest text-white placeholder:text-slate-600 focus:outline-none focus:border-[var(--neon-pink)] transition-all font-righteous uppercase"
                   />
                   <span className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-[var(--neon-pink)] transition-colors pointer-events-none">
@@ -1720,80 +1741,118 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
                     );
                   }
 
-                  return combined.map((song, idx) => (
-                    <div key={idx} className="bg-[#101015] border-2 border-white/5 p-4 rounded-[2rem] flex items-center justify-between group hover:border-[var(--neon-cyan)] transition-all relative hover:z-50 shadow-lg">
-                      <div className="flex items-center gap-6 flex-1 min-w-0">
-                        <div className="w-12 h-12 flex items-center justify-center bg-black rounded-lg border border-white/10 text-[var(--neon-cyan)] text-2xl">💿</div>
-                        <div className="min-w-0 pr-4">
-                          <div className="flex items-center gap-3">
-                            {song.isVerified && (
-                              <div className="px-2 py-0.5 bg-[var(--neon-pink)] text-black rounded-full text-[10px] font-black uppercase tracking-widest font-righteous shrink-0">VERIFIED</div>
-                            )}
-                            <h4 className="text-3xl font-black text-white uppercase truncate tracking-tighter font-bungee group-hover:text-[var(--neon-cyan)] transition-colors">{song.title}</h4>
-                            <span className="text-base text-slate-600 font-bold uppercase font-righteous tracking-widest truncate">/ {song.artist}</span>
-                          </div>
-                        </div>
-                      </div>
+                  const ITEMS_PER_PAGE = 50;
+                  const totalPages = Math.ceil(combined.length / ITEMS_PER_PAGE);
+                  const startIndex = (libraryPage - 1) * ITEMS_PER_PAGE;
+                  const paginatedSongs = combined.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
-                      <div className="flex items-center gap-4 shrink-0">
-                        <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <CopyButton request={song as any} />
-                          <YouTubeSearchButton request={song as any} />
-                          <VideoLink url={(song as any).youtubeUrl} />
-                          <button
-                            onClick={async () => { await deleteVerifiedSong(song.id).then(refresh); }}
-                            className="p-2 text-rose-500/20 hover:text-rose-500 transition-all text-xl"
-                          >✕</button>
-                        </div>
-                        <div className="flex gap-2 bg-black/40 p-1 rounded-xl border border-white/5 ml-4">
-                          <div className="relative group/assign">
-                            <button className="px-6 py-2.5 bg-white text-black text-sm font-black uppercase rounded-lg hover:bg-[var(--neon-cyan)] transition-all font-righteous tracking-wider">
-                              ASSIGN
-                            </button>
-                            <div className="absolute bottom-full right-0 mb-4 bg-[#0a0a0a] border-2 border-[var(--neon-cyan)]/30 rounded-[1.5rem] shadow-2xl opacity-0 invisible group-hover/assign:opacity-100 group-hover/assign:visible transition-all p-4 z-50 backdrop-blur-xl w-[200px]">
-                              <p className="text-base text-[var(--neon-cyan)] font-black uppercase mb-3 border-b border-white/10 pb-2 font-righteous tracking-widest">TRANSMIT TO:</p>
-                              <div className="space-y-1 max-h-48 overflow-y-auto custom-scrollbar pr-2">
-                                {session.participants.map(p => (
-                                  <button
-                                    key={p.id}
-                                    onClick={async () => { const req = await addRequest({ participantId: p.id, participantName: p.name, songName: song.title, artist: song.artist, youtubeUrl: (song as any).youtubeUrl, type: RequestType.SINGING }); if (req) await approveRequest(req.id); await refresh(); }}
-                                    className="w-full text-left p-2 rounded-lg hover:bg-white/10 hover:text-[var(--neon-cyan)] text-lg font-black text-slate-400 uppercase truncate font-righteous transition-all"
-                                  >
-                                    {p.name}
-                                  </button>
-                                ))}
-                                <div className="h-[1px] bg-white/10 my-2" />
-                                <button
-                                  onClick={async () => { const req = await addRequest({ participantId: 'DJ-MANUAL', participantName: 'GUEST', songName: song.title, artist: song.artist, youtubeUrl: (song as any).youtubeUrl, type: RequestType.SINGING }); if (req) await approveRequest(req.id); await refresh(); }}
-                                  className="w-full text-left p-2 rounded-lg bg-[var(--neon-cyan)]/20 text-[var(--neon-cyan)] hover:bg-[var(--neon-cyan)] hover:text-black text-sm font-black uppercase font-righteous transition-all"
-                                >
-                                  + GUEST
+                  return (
+                    <>
+                      {paginatedSongs.map((song, idx) => (
+                        <div key={idx} className="bg-[#101015] border-2 border-white/5 p-4 rounded-[2rem] flex items-center justify-between group hover:border-[var(--neon-cyan)] transition-all relative hover:z-50 shadow-lg">
+                          <div className="flex items-center gap-6 flex-1 min-w-0">
+                            <div className="w-12 h-12 flex items-center justify-center bg-black rounded-lg border border-white/10 text-[var(--neon-cyan)] text-2xl">💿</div>
+                            <div className="min-w-0 pr-4">
+                              <div className="flex items-center gap-3">
+                                {song.isVerified && (
+                                  <div className="px-2 py-0.5 bg-[var(--neon-pink)] text-black rounded-full text-[10px] font-black uppercase tracking-widest font-righteous shrink-0">VERIFIED</div>
+                                )}
+                                <h4 className="text-3xl font-black text-white uppercase truncate tracking-tighter font-bungee group-hover:text-[var(--neon-cyan)] transition-colors">{song.title}</h4>
+                                <span className="text-base text-slate-600 font-bold uppercase font-righteous tracking-widest truncate">/ {song.artist}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-4 shrink-0">
+                            <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <CopyButton request={song as any} />
+                              <YouTubeSearchButton request={song as any} />
+                              <VideoLink url={(song as any).youtubeUrl} />
+                              <button
+                                onClick={async () => { await deleteVerifiedSong(song.id).then(refresh); }}
+                                className="p-2 text-rose-500/20 hover:text-rose-500 transition-all text-xl"
+                              >✕</button>
+                            </div>
+                            <div className="flex gap-2 bg-black/40 p-1 rounded-xl border border-white/5 ml-4">
+                              <div className="relative group/assign">
+                                <button className="px-6 py-2.5 bg-white text-black text-sm font-black uppercase rounded-lg hover:bg-[var(--neon-cyan)] transition-all font-righteous tracking-wider">
+                                  ASSIGN
                                 </button>
+                                <div className="absolute bottom-full right-0 mb-4 bg-[#0a0a0a] border-2 border-[var(--neon-cyan)]/30 rounded-[1.5rem] shadow-2xl opacity-0 invisible group-hover/assign:opacity-100 group-hover/assign:visible transition-all p-4 z-50 backdrop-blur-xl w-[200px]">
+                                  <p className="text-base text-[var(--neon-cyan)] font-black uppercase mb-3 border-b border-white/10 pb-2 font-righteous tracking-widest">TRANSMIT TO:</p>
+                                  <div className="space-y-1 max-h-48 overflow-y-auto custom-scrollbar pr-2">
+                                    {session.participants.map(p => (
+                                      <button
+                                        key={p.id}
+                                        onClick={async () => { const req = await addRequest({ participantId: p.id, participantName: p.name, songName: song.title, artist: song.artist, youtubeUrl: (song as any).youtubeUrl, type: RequestType.SINGING }); if (req) await approveRequest(req.id); await refresh(); }}
+                                        className="w-full text-left p-2 rounded-lg hover:bg-white/10 hover:text-[var(--neon-cyan)] text-lg font-black text-slate-400 uppercase truncate font-righteous transition-all"
+                                      >
+                                        {p.name}
+                                      </button>
+                                    ))}
+                                    <div className="h-[1px] bg-white/10 my-2" />
+                                    <button
+                                      onClick={async () => { const req = await addRequest({ participantId: 'DJ-MANUAL', participantName: 'GUEST', songName: song.title, artist: song.artist, youtubeUrl: (song as any).youtubeUrl, type: RequestType.SINGING }); if (req) await approveRequest(req.id); await refresh(); }}
+                                      className="w-full text-left p-2 rounded-lg bg-[var(--neon-cyan)]/20 text-[var(--neon-cyan)] hover:bg-[var(--neon-cyan)] hover:text-black text-sm font-black uppercase font-righteous transition-all"
+                                    >
+                                      + GUEST
+                                    </button>
+                                  </div>
+                                </div>
                               </div>
-                            </div>
-                          </div>
 
-                          <div className="relative group/star">
-                            <button className="px-4 py-2.5 bg-black border border-white/10 text-[var(--neon-pink)] rounded-lg font-black text-sm uppercase tracking-widest hover:border-[var(--neon-pink)] transition-all font-righteous">★</button>
-                            <div className="absolute bottom-full right-0 mb-4 bg-[#0a0a0a] border-2 border-[var(--neon-pink)]/30 rounded-[1.5rem] shadow-2xl opacity-0 invisible group-hover/star:opacity-100 group-hover/star:visible transition-all p-4 z-50 backdrop-blur-xl w-[180px]">
-                              <p className="text-base text-[var(--neon-pink)] font-black uppercase mb-3 border-b border-white/10 pb-2 font-righteous tracking-widest">ADD FAVORITE:</p>
-                              <div className="space-y-1 max-h-48 overflow-y-auto custom-scrollbar pr-2">
-                                {session.participants.map(p => (
-                                  <button
-                                    key={p.id}
-                                    onClick={async () => { await addUserFavorite(p.id, { songName: song.title, artist: song.artist, youtubeUrl: (song as any).youtubeUrl, type: song.type as RequestType }); await refresh(); }}
-                                    className="w-full text-left p-2 rounded-lg hover:bg-white/10 hover:text-[var(--neon-pink)] text-lg font-black text-slate-400 uppercase truncate font-righteous transition-all"
-                                  >
-                                    {p.name}
-                                  </button>
-                                ))}
+                              <div className="relative group/star">
+                                <button className="px-4 py-2.5 bg-black border border-white/10 text-[var(--neon-pink)] rounded-lg font-black text-sm uppercase tracking-widest hover:border-[var(--neon-pink)] transition-all font-righteous">★</button>
+                                <div className="absolute bottom-full right-0 mb-4 bg-[#0a0a0a] border-2 border-[var(--neon-pink)]/30 rounded-[1.5rem] shadow-2xl opacity-0 invisible group-hover/star:opacity-100 group-hover/star:visible transition-all p-4 z-50 backdrop-blur-xl w-[180px]">
+                                  <p className="text-base text-[var(--neon-pink)] font-black uppercase mb-3 border-b border-white/10 pb-2 font-righteous tracking-widest">ADD FAVORITE:</p>
+                                  <div className="space-y-1 max-h-48 overflow-y-auto custom-scrollbar pr-2">
+                                    {session.participants.map(p => (
+                                      <button
+                                        key={p.id}
+                                        onClick={async () => { await addUserFavorite(p.id, { songName: song.title, artist: song.artist, youtubeUrl: (song as any).youtubeUrl, type: song.type as RequestType }); await refresh(); }}
+                                        className="w-full text-left p-2 rounded-lg hover:bg-white/10 hover:text-[var(--neon-pink)] text-lg font-black text-slate-400 uppercase truncate font-righteous transition-all"
+                                      >
+                                        {p.name}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
                               </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    </div>
-                  ));
+                      ))}
+
+                      {totalPages > 1 && (
+                        <div className="flex justify-between items-center bg-[#0a0a0a] border-2 border-white/5 rounded-2xl p-4 mt-6">
+                          <button
+                            onClick={() => setLibraryPage(p => Math.max(1, p - 1))}
+                            disabled={libraryPage === 1}
+                            className="px-6 py-3 bg-white/10 hover:bg-white/20 disabled:opacity-30 rounded-xl font-black font-righteous uppercase transition-all text-white border border-white/10 tracking-widest text-sm"
+                          >
+                            ◀ PREV
+                          </button>
+
+                          <div className="flex flex-col items-center">
+                            <span className="text-[var(--neon-cyan)] font-black uppercase tracking-[0.3em] text-lg font-righteous mb-1">
+                              PAGE {libraryPage} <span className="text-white/30 text-sm">/ {totalPages}</span>
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
+                              {combined.length} TOTAL TRACKS
+                            </span>
+                          </div>
+
+                          <button
+                            onClick={() => setLibraryPage(p => Math.min(totalPages, p + 1))}
+                            disabled={libraryPage === totalPages}
+                            className="px-6 py-3 bg-[var(--neon-cyan)] hover:bg-white text-black disabled:opacity-30 rounded-xl font-black font-righteous uppercase transition-all shadow-[0_0_15px_rgba(0,229,255,0.3)] disabled:shadow-none tracking-widest text-sm"
+                          >
+                            NEXT ▶
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  );
                 })()}
               </div>
             </section>

@@ -11,6 +11,7 @@ const ACCOUNTS_KEY = 'kstar_user_accounts';
 
 let isRemoteClient = false;
 let sessionUpdatePromise: Promise<any> = Promise.resolve();
+let memorySongbook: VerifiedSong[] | null = null;
 
 /**
  * Serializes session updates to prevent race conditions
@@ -81,9 +82,11 @@ const storage = {
   }
 };
 
-syncService.onStateReceived = (state) => {
+syncService.onStateReceived = async (state) => {
   if (isRemoteClient) {
-    storage.set(STORAGE_KEY, state);
+    const local = await storage.get(STORAGE_KEY);
+    const mergedState = { ...state, verifiedSongbook: local?.verifiedSongbook || [] };
+    await storage.set(STORAGE_KEY, mergedState);
   }
 };
 
@@ -216,6 +219,16 @@ async function handleRemoteAction(action: RemoteAction) {
       case 'REORDER_MY_REQUESTS':
         await reorderMyRequests(action.senderId || 'unknown', action.payload.requestId, action.payload.direction);
         break;
+      case 'RELOAD_SONGBOOK':
+        if (isRemoteClient && action.payload?.hostId) {
+          const newSongbook = await fetchSongbook(action.payload.hostId);
+          memorySongbook = newSongbook;
+          await storage.set('kstar_songbook', newSongbook);
+          await runSessionUpdate((s) => {
+            s.verifiedSongbook = newSongbook;
+          });
+        }
+        break;
     }
   } catch (e: any) {
     console.error(`[SessionManager] Action ${action.type} handled with error:`, e.message);
@@ -307,9 +320,19 @@ export const initializeSync = async (role: 'DJ' | 'PARTICIPANT', room?: string) 
   // Participants: Setup direct Firestore state subscription as a robust fallback
   if (isRemoteClient && room) {
     console.log("[Sync] Initializing robust Firestore fallback sync for room:", room);
-    subscribeToSession(room, (newState) => {
+
+    // Fetch the external songbook right away on join
+    fetchSongbook(room).then(async (songbook) => {
+      await runSessionUpdate(s => {
+        s.verifiedSongbook = songbook;
+      });
+    });
+
+    subscribeToSession(room, async (newState) => {
       console.log("[Sync] Received state update via Firestore fallback");
-      syncService.applyIncomingState(newState);
+      const local = await storage.get(STORAGE_KEY);
+      const mergedState = { ...newState, verifiedSongbook: local?.verifiedSongbook || [] };
+      syncService.applyIncomingState(mergedState);
     });
   }
 };
@@ -375,16 +398,20 @@ export const getSession = async (sessionId?: string): Promise<KaraokeSession> =>
 
       const session = await storage.get(STORAGE_KEY) || { ...INITIAL_SESSION };
 
+      if (!memorySongbook) {
+        memorySongbook = await storage.get('kstar_songbook') || [];
+      }
+      session.verifiedSongbook = memorySongbook!;
+
       // If we are a remote client connecting to a specific room, and the local storage room ID differs,
       // we must not return the stale session.
       if (sessionId && isRemoteClient && session.id && session.id !== sessionId) {
-        return { ...INITIAL_SESSION, id: sessionId };
+        return { ...INITIAL_SESSION, id: sessionId, verifiedSongbook: memorySongbook! };
       }
 
       if (!session.history) session.history = [];
       if (!session.messages) session.messages = [];
       if (!session.tickerMessages) session.tickerMessages = [];
-      if (!session.verifiedSongbook) session.verifiedSongbook = [];
       if (session.isPlayingVideo === undefined) session.isPlayingVideo = false;
       if (!session.nextRequestNumber) session.nextRequestNumber = 1;
       if (session.maxRequestsPerUser === undefined) session.maxRequestsPerUser = 5;
@@ -403,8 +430,36 @@ export const getSession = async (sessionId?: string): Promise<KaraokeSession> =>
   }
 };
 
+export const publishSongbook = async (sessionId: string, songbook: VerifiedSong[]) => {
+  try {
+    const docRef = doc(db, "songbooks", sessionId);
+    await setDoc(docRef, { data: JSON.stringify(songbook), updatedAt: Date.now() });
+  } catch (e) { console.error("Error publishing songbook", e); }
+};
+
+export const fetchSongbook = async (sessionId: string): Promise<VerifiedSong[]> => {
+  try {
+    const docRef = doc(db, "songbooks", sessionId);
+    const snap = await getDoc(docRef);
+    if (snap.exists() && snap.data().data) {
+      return JSON.parse(snap.data().data);
+    }
+  } catch (e) { console.error("Error fetching songbook", e); }
+  return [];
+};
+
+export const broadcastSongbookReload = async () => {
+  const session = await getSession();
+  syncService.broadcastAction({
+    type: 'RELOAD_SONGBOOK',
+    payload: { hostId: session.id },
+    senderId: session.id
+  });
+};
+
 export const saveSession = async (session: KaraokeSession) => {
-  await storage.set(STORAGE_KEY, session);
+  const sessionToSave = { ...session, verifiedSongbook: [] };
+  await storage.set(STORAGE_KEY, sessionToSave);
   syncService.broadcastState(session);
 
   // If we are the DJ/Host, also persist to Firestore for participants joining later
@@ -412,8 +467,12 @@ export const saveSession = async (session: KaraokeSession) => {
   if (!isRemoteClient && session.id) {
     try {
       const sessionDoc = doc(db, "sessions", session.id);
+
+      // Omit verifiedSongbook from real-time fullState document to prevent 1MB limit & Firestore reads bloat
+      const firestoreSession = { ...session, verifiedSongbook: [] };
+
       await updateDoc(sessionDoc, {
-        fullState: JSON.stringify(session),
+        fullState: JSON.stringify(firestoreSession),
         lastHeartbeat: Date.now(),
         participantsCount: session.participants.length
       });
@@ -421,6 +480,16 @@ export const saveSession = async (session: KaraokeSession) => {
       console.error("[SessionManager] Error persisting full state to Firestore:", e);
     }
   }
+};
+
+export const saveSongbookLocally = async (songbook: VerifiedSong[]) => {
+  memorySongbook = songbook;
+  await storage.set('kstar_songbook', songbook);
+  const session = await getSession();
+  if (!isRemoteClient && session.id) {
+    await publishSongbook(session.id, songbook);
+  }
+  syncService.broadcastState(session);
 };
 
 export const getSessionById = async (sessionId: string): Promise<KaraokeSession | null> => {
@@ -435,7 +504,19 @@ export const getSessionById = async (sessionId: string): Promise<KaraokeSession 
       if (snapshot.exists()) {
         const data = snapshot.data();
         if (data.fullState) {
-          return JSON.parse(data.fullState) as KaraokeSession;
+          const parsed = JSON.parse(data.fullState) as KaraokeSession;
+          if (!memorySongbook) {
+            memorySongbook = await storage.get('kstar_songbook') || [];
+          }
+          parsed.verifiedSongbook = memorySongbook!;
+          if (isRemoteClient) {
+            if (parsed.verifiedSongbook.length === 0) {
+              // First time load or refresh
+              parsed.verifiedSongbook = await fetchSongbook(sessionId);
+              await saveSongbookLocally(parsed.verifiedSongbook);
+            }
+          }
+          return parsed;
         }
       }
       return null;
@@ -510,7 +591,8 @@ export const addVerifiedSong = async (song: Omit<VerifiedSong, 'id' | 'addedAt'>
     addedAt: Date.now()
   };
   session.verifiedSongbook.push(newSong);
-  await saveSession(session);
+  await saveSongbookLocally(session.verifiedSongbook);
+  await broadcastSongbookReload();
 };
 
 export const updateVerifiedSong = async (songId: string, updates: Partial<VerifiedSong>) => {
@@ -518,22 +600,62 @@ export const updateVerifiedSong = async (songId: string, updates: Partial<Verifi
   const index = session.verifiedSongbook.findIndex(s => s.id === songId);
   if (index !== -1) {
     session.verifiedSongbook[index] = { ...session.verifiedSongbook[index], ...updates };
-    await saveSession(session);
+    await saveSongbookLocally(session.verifiedSongbook);
+    await broadcastSongbookReload();
   }
 };
 
 export const deleteVerifiedSong = async (songId: string) => {
   const session = await getSession();
   session.verifiedSongbook = session.verifiedSongbook.filter(s => s.id !== songId);
-  await saveSession(session);
+  await saveSongbookLocally(session.verifiedSongbook);
+  await broadcastSongbookReload();
 };
 
 export const resetSession = async () => {
   const current = await getSession();
+
+  // --- Save all participant activity before wiping ---
+  try {
+    const allSessionSongs = [...(current.requests || []), ...(current.history || [])];
+    for (const participant of (current.participants || [])) {
+      const participantSongs = allSessionSongs.filter(s => s.participantId === participant.id);
+      if (participantSongs.length === 0) continue;
+      try {
+        const userRef = doc(db, "users", participant.id);
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+          let pHistory: any[] = userSnap.data().personalHistory || [];
+          for (const song of participantSongs) {
+            const exists = pHistory.some((h: any) =>
+              h.id === song.id ||
+              (h.songName?.toLowerCase() === song.songName?.toLowerCase() &&
+                h.artist?.toLowerCase() === song.artist?.toLowerCase())
+            );
+            if (!exists) {
+              pHistory.unshift({
+                ...song,
+                status: RequestStatus.DONE,
+                completedAt: song.completedAt || song.playedAt || Date.now()
+              });
+            }
+          }
+          await updateDoc(userRef, { personalHistory: pHistory.slice(0, 50) });
+        }
+      } catch (e) {
+        console.warn(`[resetSession] Could not save history for ${participant.name}:`, e);
+      }
+    }
+  } catch (e) {
+    console.error('[resetSession] Error saving participant activity:', e);
+  }
+  // --- End activity save ---
+
   const emptySession: KaraokeSession = {
     ...INITIAL_SESSION,
     id: current.id, // Preserve the room ID so participants scanning the old QR code or reloading don't see stale data
     verifiedSongbook: current.verifiedSongbook, // Persist the songbook
+    participants: [], // Disconnect all users
     nextRequestNumber: 1,
     startedAt: Date.now()
   };
