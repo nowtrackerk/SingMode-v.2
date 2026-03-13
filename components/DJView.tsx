@@ -1263,7 +1263,7 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
                         <button onClick={() => setIsAddingVerifiedSong(true)} className="text-[var(--neon-cyan)] hover:text-white transition-colors underline decoration-dotted">+ ADD NEW</button>
                       </h4>
                       <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar custom-scrollbar-h">
-                        {[...verifiedSongs].reverse().map(v => (
+                        {[...verifiedSongs].reverse().slice(0, 50).map(v => (
                           <div key={v.id} className="bg-black/80 p-5 rounded-[2rem] border border-white/5 flex flex-col justify-between group hover:border-[var(--neon-cyan)] transition-all shadow-lg min-w-[280px] max-w-[280px]">
                             <div className="min-w-0 mb-4">
                               <div className="text-2xl font-bold text-white uppercase truncate tracking-tight group-hover:text-[var(--neon-cyan)] transition-colors font-bungee mb-1">{v.songName}</div>
@@ -1379,7 +1379,7 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
                   )}
                 </div>
                 <div className="space-y-3 overflow-y-auto custom-scrollbar pr-2 flex-1">
-                  {session.history.map((item, i) => (
+                  {session.history.slice(0, 100).map((item, i) => (
                     <div key={i} className="bg-black/40 p-4 rounded-2xl border border-white/5 flex flex-col group hover:border-[var(--neon-purple)] transition-all">
                       <div className="flex justify-between items-start mb-2">
                         <div className="min-w-0 pr-2">
@@ -1603,6 +1603,7 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
                 <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
                   {session.history
                     .filter(item => (item.playedAt || 0) >= (session.startedAt || 0))
+                    .slice(0, 100)
                     .map((item, i) => (
                       <div key={i} className="bg-black/40 p-5 rounded-[1.5rem] border border-white/5 group hover:border-[var(--neon-purple)] transition-all">
                         <div className="flex justify-between items-start mb-3">
@@ -1633,6 +1634,7 @@ const DJView: React.FC<DJViewProps> = ({ onAdminAccess }) => {
                     const rounds: Record<number, SongRequest[]> = {};
                     session.history
                       .filter(song => (song.playedAt || 0) >= (session.startedAt || 0))
+                      .slice(0, 300) // limit rounds processing to recent history
                       .forEach(song => {
                         const time = song.playedAt || 0;
                         if (!rounds[time]) rounds[time] = [];

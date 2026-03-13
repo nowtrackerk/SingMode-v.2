@@ -670,7 +670,7 @@ export const setStageVideoPlaying = async (active: boolean) => {
 
 export const getAllAccounts = async (): Promise<UserProfile[]> => {
   // If we have a local cache from onSnapshot, use it.
-  // Fallback to fetch from Firestore if cache is empty (e.g. first load before sync)
+  // Fallback to fetch from Firestore
   let accounts = await storage.get(ACCOUNTS_KEY);
   if (!accounts || accounts.length === 0) {
     try {
@@ -1247,7 +1247,7 @@ export const removeParticipant = async (participantId: string) => {
   }));
 
   if (historyCopies.length > 0) {
-    session.history = [...historyCopies, ...session.history].slice(0, 100);
+    session.history = [...historyCopies, ...session.history].slice(0, 200);
   }
 
   session.participants = session.participants.filter(p => p.id !== participantId);
@@ -1841,7 +1841,7 @@ export const rotateStageSong = async (requestId: string) => {
   if (index !== -1) {
     const [song] = session.currentRound.splice(index, 1);
     const historicalCopy = { ...song, playedAt: Date.now(), isInRound: false };
-    session.history = [historicalCopy, ...session.history].slice(0, 100);
+    session.history = [historicalCopy, ...session.history].slice(0, 200);
     session.currentRound.push(song);
     await saveSession(session);
   }
@@ -1854,7 +1854,7 @@ export const completeStageSong = async (requestId: string) => {
   if (index !== -1) {
     const [song] = session.currentRound.splice(index, 1);
     const finishedSong = { ...song, playedAt: Date.now(), isInRound: false, status: RequestStatus.DONE };
-    session.history = [finishedSong, ...session.history].slice(0, 100);
+    session.history = [finishedSong, ...session.history].slice(0, 200);
     session.requests = session.requests.filter(r => r.id !== requestId);
 
     // Update performer's personal history
@@ -1898,7 +1898,7 @@ export const finishRound = async () => {
   }));
 
   const roundIds = session.currentRound.map(r => r.id);
-  session.history = [...finishedSongs, ...session.history].slice(0, 100);
+  session.history = [...finishedSongs, ...session.history].slice(0, 200);
   session.requests = session.requests.filter(r => !roundIds.includes(r.id));
 
   // Update personal histories for all performers in the round
