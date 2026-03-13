@@ -537,6 +537,21 @@ export const subscribeToSession = (sessionId: string, callback: (session: Karaok
       if (data.fullState) {
         try {
           const session = JSON.parse(data.fullState) as KaraokeSession;
+          // IMPORTANT: attach the in-memory songbook so the UI doesn't lose all library data
+          // since it's no longer saved inside fullState for performance reasons.
+          if (memorySongbook) {
+            session.verifiedSongbook = memorySongbook;
+          } else {
+             // as a fallback if memorySongbook hasn't loaded yet
+             session.verifiedSongbook = [];
+             storage.get('kstar_songbook').then(sb => {
+                if (sb) {
+                  memorySongbook = sb;
+                  session.verifiedSongbook = sb;
+                  callback({...session}); // trigger a re-render once it loads
+                }
+             });
+          }
           callback(session);
         } catch (e) {
           console.error("[SessionManager] Error parsing session state from Firestore:", e);
