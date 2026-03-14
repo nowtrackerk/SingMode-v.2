@@ -384,29 +384,45 @@ export const getSession = async (sessionId?: string): Promise<KaraokeSession> =>
 
   try {
     const sessionPromise = (async () => {
+      let session;
+
       // If we have a session ID, prioritize the cloud state (especially for Participants)
       if (sessionId) {
         const cloudSess = await getSessionById(sessionId);
         if (cloudSess) {
+          session = cloudSess;
           // If we are a remote client, also update our local cache immediately
           if (isRemoteClient) {
             await storage.set(STORAGE_KEY, cloudSess);
           }
-          return cloudSess;
         }
       }
 
-      const session = await storage.get(STORAGE_KEY) || { ...INITIAL_SESSION };
-
-      if (!memorySongbook) {
-        memorySongbook = await storage.get('kstar_songbook') || [];
+      if (!session) {
+         session = await storage.get(STORAGE_KEY) || { ...INITIAL_SESSION };
       }
+
+      // ALWAYS attach memorySongbook to the session before returning
+      if (!memorySongbook) {
+        memorySongbook = await storage.get('kstar_songbook');
+        
+        // MIGRATION: If kstar_songbook is empty/null, but the legacy session object 
+        // still has the 5000+ songs, migrate them to the new isolated storage.
+        if ((!memorySongbook || memorySongbook.length === 0) && session.verifiedSongbook && session.verifiedSongbook.length > 0) {
+           memorySongbook = session.verifiedSongbook;
+           await storage.set('kstar_songbook', memorySongbook);
+           console.log("[Migration] Moved", memorySongbook.length, "legacy songs to new kstar_songbook storage key.");
+        } else if (!memorySongbook) {
+           memorySongbook = [];
+        }
+      }
+      
       session.verifiedSongbook = memorySongbook!;
 
       // If we are a remote client connecting to a specific room, and the local storage room ID differs,
       // we must not return the stale session.
       if (sessionId && isRemoteClient && session.id && session.id !== sessionId) {
-        return { ...INITIAL_SESSION, id: sessionId, verifiedSongbook: memorySongbook! };
+         session.id = sessionId;
       }
 
       if (!session.history) session.history = [];
@@ -426,6 +442,10 @@ export const getSession = async (sessionId?: string): Promise<KaraokeSession> =>
   } catch (e) {
     console.warn("[Session] getSession fallback to local due to timeout or error:", e);
     const local = await storage.get(STORAGE_KEY) || { ...INITIAL_SESSION };
+    if (!memorySongbook) {
+       memorySongbook = await storage.get('kstar_songbook') || [];
+    }
+    local.verifiedSongbook = memorySongbook!;
     return local;
   }
 };
